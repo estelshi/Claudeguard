@@ -15,12 +15,12 @@
 
 ## 下载
 
-安装包计划作为本仓库的 GitHub Release 发布，标签拟为 `v1.0.0`。**该 Release 尚未发布，目前不能从本仓库下载安装包。** 需要安装包时，请先按上面的平台 README 在本地构建。
+安装包已作为 **v1.0.0 预发布测试版** 发布，见 [GitHub Release](https://github.com/xinghaoshi-ux/Claudeguard/releases/tag/v1.0.0)。这不是正式稳定版，**不建议在生产环境依赖**。
 
-关于已打包安装包的已知状态（发布后仍适用）：
+- macOS 15+ Universal（Apple Silicon arm64 与 Intel x86_64）：[DMG](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.0/ClaudeGuard-1.0.0-macos-universal.dmg) 或 [应用 ZIP](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.0/ClaudeGuard-1.0.0-macos-universal.zip)。安装包为临时签名，未公证。
+- Windows 10 / 11 x64：[便携 ZIP](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.0/ClaudeGuard-1.0.0-windows-x64.zip) 或 [安装程序](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.0/ClaudeGuard-1.0.0-windows-x64-setup.exe)。安装包未签名，且尚未在真机验收。
 
-- macOS 安装包为临时签名，未公证。
-- Windows 安装包未签名，且尚未在真机验收。
+下载后可用 [`SHA256SUMS.txt`](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.0/SHA256SUMS.txt) 核对完整性。也可按上面的平台 README 在本地构建。
 
 ## 当前状态
 

@@ -63,7 +63,7 @@ ClaudeGuard 不提供节点、订阅或线路。你需要自己有一个固定 I
 
 ## 下载与安装
 
-安装包计划随本仓库 GitHub Releases 的 `v1.0.0` 标签提供；**该 Release 尚未发布，当前还不能从本仓库下载安装包**。发布前请在本平台源码目录本地构建，产物位于 `dist/`。总览见[仓库首页](../../README.md)。
+安装包已作为 **v1.0.0 预发布测试版** 发布，见 [GitHub Release](https://github.com/xinghaoshi-ux/Claudeguard/releases/tag/v1.0.0)，可下载 [便携 ZIP](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.0/ClaudeGuard-1.0.0-windows-x64.zip) 或 [安装程序](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.0/ClaudeGuard-1.0.0-windows-x64-setup.exe)。这不是正式稳定版，不建议在生产环境依赖。也可在本平台源码目录本地构建，产物位于 `dist/`。总览见[仓库首页](../../README.md)。
 
 适用于 Windows 10 / 11 x64。完整解压 `ClaudeGuard-1.0.0-windows-x64.zip` 后运行 `ClaudeGuard.exe`，也可使用 `ClaudeGuard-1.0.0-windows-x64-setup.exe`。发布包未签名。Clash 扩展脚本与 v2rayN 节点和路由导入步骤见 [Windows 使用指南](apps/guardnook-windows/README.md)。
 
