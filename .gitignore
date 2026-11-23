@@ -1,28 +1,29 @@
-# Build output
+# Build output and local tools
+.DS_Store
 .build/
 .swiftpm/
-dist/
-*.app/
+__pycache__/
 node_modules/
-
-# Release artifacts (built, not source)
-*.dmg
-*.zip
-*.pkg
-
-# macOS
-.DS_Store
-__MACOSX/
-
-# Runtime data, never committed
-config.json
-state.json
-codex-intranet.json
-prepared-Script.js
-Backups/
-environment-backups*/
+staged/
+dist/
+test-results/
 *.log
 
-# Packaging staging
-staged/
-test-results/
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+config.json
+auth.json
+state.json
+monitor.json
+prepared-Script.js
+*.pem
+*.p12
+*.key
+
+# Installers and archives that must not enter git history
+/releases/
+/ClaudeGuard-*.dmg
+/ClaudeGuard-*.exe
+/ClaudeGuard-*.zip

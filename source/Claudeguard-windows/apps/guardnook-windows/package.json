@@ -1,0 +1,74 @@
+{
+  "name": "@guardnook/share-windows",
+  "productName": "ClaudeGuard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ClaudeGuard fixed exit protection for Windows",
+  "author": "GuardNook",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "dev": "electron .",
+    "stage": "node scripts/stage.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "package:win": "npm run stage && electron-builder --win nsis zip --x64 --publish never",
+    "package:zip": "npm run stage && electron-builder --win zip --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "43.4.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "local.guardnook.share.windows",
+    "productName": "ClaudeGuard",
+    "executableName": "ClaudeGuard",
+    "asar": true,
+    "directories": {
+      "output": "../../dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/**",
+      "renderer/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "staged/GuardCore",
+        "to": "GuardCore"
+      },
+      {
+        "from": "staged/Licenses",
+        "to": "Licenses"
+      },
+      {
+        "from": "README.md",
+        "to": "使用说明.md"
+      },
+      {
+        "from": "assets/taskbar-mask.png",
+        "to": "Clawd.png"
+      }
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "artifactName": "ClaudeGuard-${version}-windows-${arch}.${ext}",
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ClaudeGuard",
+      "artifactName": "ClaudeGuard-${version}-windows-${arch}-setup.${ext}"
+    },
+    "publish": null
+  }
+}

@@ -1,41 +1,31 @@
-# GuardNook
+# ClaudeGuard
 
-macOS 与 Windows 双端的 Claude / Codex 网络状态面板：显示当前本机网络环境，按需启用固定出口守护，并在出口不符或链路失效时阻断受保护流量。
+让经过守护通道的 Claude 流量走你指定的固定出口。出口变化时，守护会断开连接。
 
-## 目录结构
+本仓库以解压后的源码目录发布，同时包含 macOS 和 Windows 两个平台，互不替代。
 
-| 路径 | 内容 |
-|---|---|
-| `guardnook/` | macOS 版（Swift + Node.js 守护服务），需 macOS 15+ |
-| `guardnook-windows/` | Windows 版（Electron），开发态复用 `guardnook/Service/claude-guard` |
-| `THIRD-PARTY-NOTICES.md` | 第三方组件声明 |
+## 源码入口
 
-## 构建
+| 平台 | 目录 | 说明 |
+| --- | --- | --- |
+| macOS 15+ | [`source/Claudeguard-macos/`](source/Claudeguard-macos/) | Apple Silicon 与 Intel Universal。使用说明与本地构建见该目录 [README](source/Claudeguard-macos/README.md)。 |
+| Windows 10 / 11 x64 | [`source/Claudeguard-windows/`](source/Claudeguard-windows/) | 便携包与安装程序的源码。使用说明与本地构建见该目录 [README](source/Claudeguard-windows/README.md)。 |
 
-**macOS**
+在对应平台目录内构建和测试，不要把本仓库最外层当作原来的单平台仓库根目录。
 
-```bash
-cd guardnook
-swift build            # 或 open Package.swift 用 Xcode 打开
-```
+## 下载
 
-打包脚本见 `guardnook/Scripts/`。
+安装包计划作为本仓库的 GitHub Release 发布，标签拟为 `v1.0.0`。**该 Release 尚未发布，目前不能从本仓库下载安装包。** 需要安装包时，请先按上面的平台 README 在本地构建。
 
-**Windows**
+关于已打包安装包的已知状态（发布后仍适用）：
 
-```bash
-cd guardnook-windows
-npm install
-npm run dev              # 开发运行
-npm run package:win      # 生成 NSIS 安装包与 zip
-```
+- macOS 安装包为临时签名，未公证。
+- Windows 安装包未签名，且尚未在真机验收。
 
-## 关于脱敏
+## 当前状态
 
-本仓库是分享用版本：文本文件中的 IPv4 地址已统一替换为 `<IP>`，包括守护期望的固定出口。首次使用需要在 `guardnook/Service/claude-guard/config.mjs` 的 `EXPECTED_IP` 以及运行期配置里填入实际出口地址，否则守护不会放行任何 Claude 流量。
+两套源码均为 1.0.0。真实公网固定出口、系统 TUN 和应用联动仍待验证；Windows 的代理导入和 v2rayN 相关步骤也尚未在真机验收。详细说明见各平台 README 与测试报告。
 
-`127.0.0.1` 与 `0.0.0.0` 属于本机回环与未指定地址，未做替换。
+## 许可证
 
-## 许可
-
-见 `guardnook/LICENSE` 与 `THIRD-PARTY-NOTICES.md`。
+项目发布许可待确认。各平台目录随附已有许可文本和第三方说明。
