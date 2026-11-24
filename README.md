@@ -4,7 +4,7 @@
 
 # ClaudeGuard
 
-[▶ 观看 Windows 演示视频（MP4）](docs/media/claudeguard-windows-demo.mp4?raw=true)
+https://github.com/user-attachments/assets/ff98a99d-b422-4894-bd38-761bef43be18
 
 **让经过守护通道的 Claude 流量走你指定的固定出口。出口变化时，守护会断开连接。**
 
