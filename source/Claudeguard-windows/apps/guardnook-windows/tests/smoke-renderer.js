@@ -41,6 +41,20 @@
   }
   $('[data-tab=guard]').click()
   assert($('#connection-checks').children.length >= 5, 'connection checklist lives on the guard page')
+  for (const [name, instruction] of [['tun', '严格路由'], ['rules', '一键导入']]) {
+    const tip = $(`#check-tip-${name}`)
+    const button = $(`button[aria-describedby="${tip.id}"]`)
+    assert(tip.hidden && tip.getAttribute('role') === 'tooltip' && tip.textContent.includes(instruction), `${name} help contains instructions`)
+    button.parentElement.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse' }))
+    assert(!tip.hidden, `${name} help opens on hover`)
+    button.parentElement.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' }))
+    assert(tip.hidden, `${name} help closes after hover`)
+    button.focus()
+    assert(!tip.hidden, `${name} help opens on focus`)
+    button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    assert(tip.hidden, `${name} help closes with Escape`)
+    button.blur()
+  }
   assert($('#guard #network-cards') && $('#guard .net-block').nextElementSibling.classList.contains('kpis'), 'network tiles sit right under the hero')
   assert($('#guard-summary').dataset.tone === 'idle' && $('#guard-block').hidden, 'unconfigured: idle badge, no block button')
   assert((await window.guardnook.boot()).value.indicator.key === 'unconfigured', 'unconfigured status uses the neutral taskbar icon')

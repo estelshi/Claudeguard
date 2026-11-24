@@ -78,6 +78,21 @@ function harness(c, supported = true) {
   return { guard, values, ip(value) { ip = value }, fault(value) { fault = value }, ipv6() { ipv6 = true } }
 }
 
+test('relay reports TUN re-enabled even while its rules are missing', async () => {
+  const { guard, values } = harness(validateShareConfig({ ...config(), requireTun: true }), false)
+  try {
+    values['/configs'].tun = { enable: false }
+    assert.equal(await guard.checkTun(), false)
+    values['/configs'].tun.enable = true
+    const status = await guard.inspect()
+    assert.equal(status.tunEnabled, true)
+    assert.equal(status.reason, 'guard-route-not-installed')
+    assert.equal(status.gateway.open, false)
+  } finally {
+    await guard.dispose()
+  }
+})
+
 test('SOCKS5 link accepts no auth and decodes literal special credentials exactly once', () => {
   assert.deepEqual(parseSocks5Link(' socks5://198.51.100.7:1080 '),
     { host: '198.51.100.7', port: 1080, username: '', password: '' })
@@ -448,13 +463,17 @@ test('installed Mihomo accepts the generated fixture and reports rule and proxy 
 
 test('an actual relay connection failure uses the auxiliary check only to localize the failure', async () => {
   const c = config(), receipt = []
-  const connect = async () => { throw new Error('fixture unreachable') }
+  const connect = async ({ timeoutMs }) => {
+    assert.ok(timeoutMs > 4000 && timeoutMs <= c.timeoutMs)
+    receipt.push(['connect', true])
+    throw new Error('fixture unreachable')
+  }
   const emit = (stage, result) => receipt.push([stage, result.ok])
   await assert.rejects(probeRelayPath(c, { request: async () => ({ delay: 3 }) }, credentials, emit, { connect }), /exit_unreachable/)
-  assert.deepEqual(receipt, [['entry', true], ['exit', false]])
+  assert.deepEqual(receipt, [['connect', true], ['entry', true], ['exit', false]])
   receipt.length = 0
   await assert.rejects(probeRelayPath(c, { request: async () => ({}) }, credentials, emit, { connect }), /entry_unavailable/)
-  assert.deepEqual(receipt, [['entry', false], ['exit', false]])
+  assert.deepEqual(receipt, [['connect', true], ['entry', false], ['exit', false]])
 })
 
 

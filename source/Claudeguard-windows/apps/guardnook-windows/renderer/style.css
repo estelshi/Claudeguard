@@ -393,6 +393,10 @@ h2{font-size:13px;font-weight:600;color:var(--ink)}
 .checklist-card .checks{flex:1;display:grid;grid-auto-rows:1fr}
 .check:last-child{border-bottom:0}
 .check-name{font-weight:500;color:var(--ink);white-space:nowrap}
+.check-label{position:relative;display:inline-flex;align-items:center;gap:5px}
+.check-label:has(.check-tip:not([hidden])){z-index:3}
+.check-label .check-tip{width:310px;max-width:calc(100vw - 82px);color:var(--ink)}
+.check-tip .help-instructions{margin:0;padding-inline-start:1.35em}
 .check-state{display:inline-flex;align-items:center;justify-content:center;min-width:56px;max-width:60%;height:22px;padding:0 10px;border-radius:99px;font-size:11px;font-weight:600;background:var(--chip);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .check.good .check-state{background:var(--good-tint);color:var(--good-ink)}
 .check.bad .check-state{background:var(--bad);color:#fff}

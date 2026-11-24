@@ -138,6 +138,7 @@ function readExactly(socket, length, timeout) {
 }
 
 export async function checkSocks5(socket, credentials, timeout = 2500, attest = async () => {}) {
+  const deadline = Date.now() + timeout
   const username = Buffer.from(credentials.username), password = Buffer.from(credentials.password)
   const method = username.length ? 2 : 0
   const hello = readExactly(socket, 2, timeout)
@@ -147,7 +148,9 @@ export async function checkSocks5(socket, credentials, timeout = 2500, attest = 
   await attest()
   if (reply[1] !== method) throw new Error('exit_auth_failed')
   if (!method) return
-  const auth = readExactly(socket, 2, timeout)
+  const remaining = deadline - Date.now()
+  if (remaining <= 0) throw new Error('exit_unreachable')
+  const auth = readExactly(socket, 2, remaining)
   socket.write(Buffer.concat([Buffer.from([1, username.length]), username, Buffer.from([password.length]), password]))
   const result = await auth
   if (result[0] !== 1 || result[1] !== 0) throw new Error('exit_auth_failed')
@@ -207,13 +210,19 @@ export async function globalIPv6Present(options) {
 
 export async function probeRelayPath(c, controller, credentials, report, { connect = connectTunnel } = {}) {
   const exitStart = Date.now()
+  const deadline = exitStart + c.timeoutMs
+  const remaining = () => {
+    const time = deadline - Date.now()
+    if (time <= 0) throw new Error('exit_unreachable')
+    return time
+  }
   let socket, entryConfirmed = false
   try {
     if (c.relay.auth && !credentials) throw new Error('relay_credentials_unavailable')
-    socket = await connect({ ...c, timeoutMs: 4000 }, `${c.relay.host}:${c.relay.port}`, c.relay.checkPort)
+    socket = await connect({ ...c, timeoutMs: remaining() }, `${c.relay.host}:${c.relay.port}`, c.relay.checkPort)
     socket.on('error', () => {})
-    await checkSocks5(socket, credentials ?? { username: '', password: '' }, 2500, async () => {
-      const connections = await controller.request('/connections', 'GET', undefined, { timeoutMs: 1200 })
+    await checkSocks5(socket, credentials ?? { username: '', password: '' }, remaining(), async () => {
+      const connections = await controller.request('/connections', 'GET', undefined, { timeoutMs: Math.min(1200, remaining()) })
       const row = connections.connections?.find(item => Number(item.metadata?.sourcePort) === socket.localPort
         && Number(item.metadata?.inboundPort) === c.relay.checkPort)
       if (!row?.chains?.includes(relayEntry) || row.chains.some(name => name !== relayEntry && !relayEntryMatches(c.relay, name)))
@@ -221,6 +230,7 @@ export async function probeRelayPath(c, controller, credentials, report, { conne
       entryConfirmed = true
       report('entry', { ok: true })
     })
+    remaining()
     report('exit', { ok: true, durationMs: Date.now() - exitStart })
   } catch (error) {
     const durationMs = Date.now() - exitStart

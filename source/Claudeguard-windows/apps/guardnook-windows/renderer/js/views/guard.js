@@ -17,6 +17,39 @@
     verified: '守护路径和出口已验证', ordinary: '普通网络对照', 'needs-review': '未确认经过守护入口',
     mismatch: '出口与预期不一致', 'exit-unavailable': '未能读到出口 IP', unavailable: '请求失败或超时',
   }
+  const CHECK_HELP = {
+    'TUN 虚拟网卡': {
+      id: 'tun',
+      clash: [
+        '在 Clash Verge 首页的「网络设置」里选「虚拟网卡模式」，打开开关。',
+        '如果启用了「整机固定出口」，点虚拟网卡旁的齿轮，确认自动路由、严格路由和 DNS 劫持已开启，且没有排除公网路由。',
+        '保存后回到 ClaudeGuard，点「重新检查」。',
+      ],
+      singbox: [
+        '在 v2rayN 中选择 sing-box 内核，然后开启 TUN。',
+        '回到 ClaudeGuard 点「重新检查」。如果仍无法确认，回配置第 1 步重新识别 v2rayN。',
+      ],
+    },
+    '守护规则': {
+      id: 'rules',
+      clash: [
+        '在 ClaudeGuard 的配置第 3 步生成脚本。退出 Clash Verge（从托盘选择退出），再点「一键导入」。',
+        '重新打开 Clash Verge，在「订阅」选中 ClaudeGuard 生成的本地订阅，保持「规则」模式并开启 TUN。',
+        '如果选择了「整机固定出口」，在「虚拟网卡模式」旁点齿轮，开启「严格路由」。',
+        '也可以把生成的脚本粘贴到「全局扩展脚本」并重载。导入完成后，回 ClaudeGuard 点「重新检查」。',
+      ],
+      singbox: [
+        '在 ClaudeGuard 的配置第 3 步复制网关节点链接，在 v2rayN 节点列表粘贴。保留原出口节点为活动服务器。',
+        '开启第二个本地监听端口，再复制并追加守护路由规则，将新增规则移到列表顶部。',
+        '保持 sing-box 内核与 TUN 开启，回到 ClaudeGuard 点「重新检查」。',
+      ],
+    },
+  }
+  const DEVICE_ROUTE_HELP = [
+    '在 Clash Verge 首页打开「网络设置 → 虚拟网卡模式」，点开关旁的齿轮，开启「严格路由」。',
+    '同时确认「自动路由」已开启、DNS 劫持包含 any:53，并且没有排除公网地址段。',
+    '保存后回到 ClaudeGuard，点「重新检查」。',
+  ]
   let helpAction
 
   function statusBadge(title, label, className, help) {
@@ -75,11 +108,50 @@
     checklist(model)
   }
 
+  function checkName(title, model) {
+    const label = node('span', title, 'check-name')
+    const help = CHECK_HELP[title]
+    if (!help) return label
+    const group = node('div', undefined, 'check-label')
+    const trigger = node('button', '?', 'help-trigger')
+    const tip = node('div', undefined, 'help-tip check-tip')
+    const steps = node('ol', undefined, 'help-instructions')
+    tip.id = `check-tip-${help.id}`
+    tip.hidden = true
+    tip.setAttribute('role', 'tooltip')
+    trigger.type = 'button'
+    trigger.setAttribute('aria-label', `${title}操作说明`)
+    trigger.setAttribute('aria-describedby', tip.id)
+    const instructions = help.id === 'rules' && model.why === 'device-tun-coverage'
+      ? DEVICE_ROUTE_HELP : help[model.singbox ? 'singbox' : 'clash']
+    steps.append(...instructions.map(step => node('li', step)))
+    tip.append(node('strong', `${title}操作说明`), steps)
+    const show = () => {
+      const bounds = trigger.getBoundingClientRect()
+      const viewport = document.querySelector('main').getBoundingClientRect()
+      tip.dataset.placement = bounds.top - viewport.top > viewport.bottom - bounds.bottom ? 'above' : 'below'
+      tip.hidden = false
+    }
+    const close = () => { tip.hidden = true }
+    group.addEventListener('pointerenter', event => {
+      if (event.pointerType !== 'touch') show()
+    })
+    group.addEventListener('pointerleave', () => {
+      if (!trigger.matches(':focus-visible')) close()
+    })
+    trigger.addEventListener('focus', show)
+    trigger.addEventListener('blur', () => { if (!group.matches(':hover')) close() })
+    trigger.addEventListener('click', show)
+    group.addEventListener('keydown', event => { if (event.key === 'Escape') close() })
+    group.append(label, trigger, tip)
+    return group
+  }
+
   function checklist(model) {
     const rows = GN.guard.checklist(store.state, store.settings, model)
-    GN.patch($('connection-checks'), rows, () => rows.map(([title, detail, tone, help]) => {
+    GN.patch($('connection-checks'), [rows, model.singbox, model.why === 'device-tun-coverage'], () => rows.map(([title, detail, tone, help]) => {
       const li = node('li', undefined, `check ${tone}`)
-      li.append(node('span', title, 'check-name'), statusBadge(title, detail, 'check-state', help))
+      li.append(checkName(title, model), statusBadge(title, detail, 'check-state', help))
       return li
     }))
   }

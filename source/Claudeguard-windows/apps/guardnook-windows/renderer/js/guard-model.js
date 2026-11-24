@@ -19,6 +19,7 @@
     'protected-rules-changed': 'Clash 当前的 Claude 分流规则与这份守护配置不一致。请重新导入规则并重载 Clash。',
     'coverage-rules-changed': 'Clash 当前的覆盖规则已改变。请重新导入规则并重载 Clash。',
     'device-rules-required': 'Clash 尚未载入整机固定出口规则。请重新导入规则并重载 Clash。',
+    'device-tun-coverage': 'TUN 已开启，但整机固定出口还需要自动路由、严格路由和 DNS 劫持。请检查 Clash 的 TUN 配置，并确认没有排除公网路由，再重新验证。',
     'frozen-chain-changed': '固定节点链已改变。请回到配置第 2 步重新核对入口节点和固定出口。',
     'rule-mode-required': '请把 Clash 切换到「规则」模式。',
     'tun-required': '请在 Clash Verge 首页打开「虚拟网卡模式（TUN）」，然后回到这里重新验证。',
@@ -49,6 +50,7 @@
     'protected-rules-changed': fixImport,
     'coverage-rules-changed': fixImport,
     'device-rules-required': fixImport,
+    'device-tun-coverage': { ...recheckTun, row: 'rules' },
     'guard-route-not-installed': fixImport,
     'frozen-chain-changed': { ...fixExit, row: 'rules', step: 1, label: '打开节点配置' },
     'rule-mode-required': { ...recheckTun, row: 'rules' },
@@ -68,6 +70,7 @@
   const issueLabels = {
     'personal-guard-conflict': '规则冲突', 'protected-rules-changed': '规则已改变', 'coverage-rules-changed': '覆盖已改变',
     'device-rules-required': '缺少整机规则', 'guard-route-not-installed': '待导入', 'frozen-chain-changed': '节点链已改变',
+    'device-tun-coverage': '整机路由覆盖未通过',
     'rule-mode-required': '需切换规则模式', 'tun-required': '需开启', 'tun-status-unavailable': '无法确认',
     'probe-or-controller-unavailable': '待重新检查', global_ipv6_present: '检测到可用出口', entry_unavailable: '入口不可用',
     exit_unreachable: '连接失败', exit_auth_failed: '认证失败', relay_credentials_unavailable: '凭据不可用',

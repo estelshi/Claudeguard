@@ -210,9 +210,10 @@ export function createGuard(c, controller, gateway, probe, { contain, drain, rel
         const policy = await readBackend()
         const { configs } = policy
         if (generation !== epoch || disposed) return snapshot()
-        if (c.requireTun && !c.relay) {
-          const gate = tunGate(policy)
-          if (gate !== true) { await blockForTun(gate); return snapshot() }
+        // Report the current TUN switch even when a relay policy check fails.
+        const tun = c.requireTun ? tunGate(policy) : true
+        if (!c.relay && tun !== true) {
+          await blockForTun(tun); return snapshot()
         }
         prepared = false
         try { verifyBackend(policy); prepared = true; attached = true }
@@ -232,10 +233,7 @@ export function createGuard(c, controller, gateway, probe, { contain, drain, rel
           const node = policy.proxies.proxies[name] ?? policy.entryProvider?.proxies?.find(p => p.name === name)
           const delay = node?.history?.at(-1)?.delay
           currentEntry = typeof name === 'string' ? { name, ...(delay > 0 ? { delay } : {}) } : undefined
-          if (c.requireTun) {
-            tunEnabled = configs.tun?.enable === true
-            if (!tunEnabled) { relayStages = {}; await blockForTun('tun-required'); return snapshot() }
-          }
+          if (tun !== true) { relayStages = {}; await blockForTun(tun); return snapshot() }
           const tunnelInterface = configs.tun?.enable === true && typeof configs.tun.device === 'string' ? configs.tun.device : undefined
           if (await ipv6({ tunnelInterface })) throw new Error('global_ipv6_present')
           if (generation !== epoch || disposed) return snapshot()

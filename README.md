@@ -4,6 +4,8 @@
 
 # ClaudeGuard
 
+[▶ 观看 Windows 演示视频（MP4）](docs/media/claudeguard-windows-demo.mp4?raw=true)
+
 **让经过守护通道的 Claude 流量走你指定的固定出口。出口变化时，守护会断开连接。**
 
 一个跑在本机的小守护：校验你的代理客户端规则和真实出口 IP，全部对上才放行 Claude 的流量；任何一项对不上就阻断，不回退、不偷偷换线路。
