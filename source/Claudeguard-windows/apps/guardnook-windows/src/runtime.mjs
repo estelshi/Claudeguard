@@ -24,10 +24,36 @@ export function describeStartError(error, c) {
   return '守护未启动。请检查配置是否有效，以及网关端口是否被占用。'
 }
 
+export function describeSetupError(error) {
+  const message = error?.message || ''
+  const status = /^Controller HTTP (\d{3})$/.exec(message)?.[1]
+  if (status === '401' || status === '403')
+    return `代理客户端的控制接口拒绝了认证（HTTP ${status}）。请回第 1 步检查「接口密钥」。`
+  if (status) return `代理客户端的控制接口返回 HTTP ${status}。请检查客户端是否正常运行，再重试。`
+  if (message === 'Controller timeout' || error?.code === 'ETIMEDOUT')
+    return '读取代理客户端的控制接口超时。请确认客户端正常运行，再重试。'
+  if (error?.code === 'ECONNREFUSED' || error?.code === 'ECONNRESET')
+    return '无法连接代理客户端的控制接口。请回第 1 步检查控制接口地址和端口。'
+  if (message === 'Invalid controller JSON' || message === 'Not a Clash controller' || message === 'Not a sing-box controller')
+    return '控制接口返回了无法识别的数据。请回第 1 步检查控制接口地址和所选客户端。'
+  if (message === 'Controller response too large') return '控制接口返回的节点数据过大，无法读取。'
+  if (message === 'Invalid controller secret') return '接口密钥格式无效。请从代理客户端重新复制密钥。'
+  if (message === 'Invalid controller URL' || message === 'Controller must be a loopback HTTP address with an explicit port')
+    return '控制接口地址无效。请在第 1 步填写带端口的本机 HTTP 地址。'
+  if (message === 'Gateway, probe, client and dashboard ports must differ' || message === 'This port is reserved for the personal edition'
+    || /^Invalid (serverPort|clientPort|probePort|gatewayPort)$/.test(message))
+    return '端口配置无效或重复。请在「高级」里检查面板、客户端、探测和网关端口。'
+  if (error instanceof SyntaxError) return '生成的 Clash 扩展脚本无法解析。请检查「高级」里选择的原始 JS 脚本。'
+  if (['EACCES', 'EPERM', 'EROFS'].includes(error?.code)) return '没有权限写入配置或脚本文件。请检查应用数据目录的权限。'
+  if (error?.code === 'ENOSPC') return '磁盘空间不足，无法写入配置或脚本文件。'
+  if (/[\u3400-\u9fff]/.test(message)) return message
+  return '未能完成配置操作。请检查接口设置后重试。'
+}
+
 export async function createRuntime(serviceDirectory, directory, { loadRelayCredentials = async () => null, storeRelayCredentials = async () => { throw new Error("无法保存中转凭据。") },
   removeRelayCredentials = async () => {}, pruneRelayCredentials = async () => {} } = {}) {
   const load = name => import(pathToFileURL(join(serviceDirectory, `${name}.mjs`)).href)
-  const [{ validateShareConfig }, { createController }, { createGateway }, { createGuard }, { probeExit }, { createDiagnostics }, { createRouteCheck }, { createConnectionLog }, { closeClaudeConnections }, setup, { probeRelayPath, parseSocks5Link, normalizeSocks5 }, singbox] = await Promise.all(
+  const [{ validateShareConfig }, { createController }, { createGateway }, { createGuard }, { probeExit }, { createDiagnostics }, { createRouteCheck }, { createConnectionLog }, { closeClaudeConnections }, setup, { probeRelayPath, parseSocks5Link, normalizeSocks5, isRelayEntryName, maxRelayEntries }, singbox] = await Promise.all(
     ['config', 'controller', 'gateway', 'guard', 'probe', 'diagnostics', 'route-check', 'connection-log', 'tun-connections', 'setup', 'relay', 'singbox'].map(load))
   let running, config, startError = null
   const statePath = join(directory, 'state.json')
@@ -85,7 +111,13 @@ export async function createRuntime(serviceDirectory, directory, { loadRelayCred
     status() { return running ? { ...running.guard.status(), connectionLog: running.connectionLog.status(), receivedAt: Date.now() } : { state: 'unconfigured', phase: 'unconfigured', reason: startError, startError, receivedAt: Date.now() } },
     async catalogue(input) {
       const previous = await readJSON(join(directory, 'config.json'), null)
-      return setup.catalogue({ ...input, targetPlatform: 'win32', controllerSocket: '', controllerSecret: input.controllerSecret || previous?.controllerSecret || '' })
+      const result = await setup.catalogue({ ...input, targetPlatform: 'win32', controllerSocket: '', controllerSecret: input.controllerSecret || previous?.controllerSecret || '' })
+      if (input.backendKind === 'singbox') return result
+      const nodes = result.nodes.map(node => ({
+        ...node,
+        relayEligible: !node.chainError && !node.upstreamChain?.length && isRelayEntryName(node.name),
+      }))
+      return { ...result, nodes, maxRelayEntries }
     },
     async save(input, originalScript) {
       const previous = await readJSON(join(directory, 'config.json'), null)

@@ -8,6 +8,45 @@
   const kind = () => document.querySelector('input[name="client-kind"]:checked')?.value || 'mihomo'
   const sb = () => kind() === 'singbox'
   let entryBy = 'nodes'
+  let secretHelpPinned = false
+  let detectionRequest = 0
+  let maxRelayEntries = Infinity
+
+  function showSecretTip(open) {
+    const tip = $('secret-help-tip'), trigger = $('secret-help-trigger')
+    if (open && tip.hidden) {
+      const bounds = trigger.getBoundingClientRect()
+      const viewport = document.querySelector('main').getBoundingClientRect()
+      tip.dataset.placement = bounds.top - viewport.top > viewport.bottom - bounds.bottom ? 'above' : 'below'
+    }
+    tip.hidden = !open
+    trigger.setAttribute('aria-expanded', String(open))
+    if (!open) secretHelpPinned = false
+  }
+
+  function bindSecretHelp() {
+    const help = $('secret-help'), trigger = $('secret-help-trigger')
+    help.addEventListener('pointerenter', event => {
+      if (event.pointerType !== 'touch') showSecretTip(true)
+    })
+    help.addEventListener('pointerleave', () => {
+      if (!secretHelpPinned && !trigger.matches(':focus-visible')) showSecretTip(false)
+    })
+    trigger.addEventListener('focus', () => {
+      if (trigger.matches(':focus-visible')) showSecretTip(true)
+    })
+    trigger.addEventListener('blur', () => showSecretTip(false))
+    trigger.addEventListener('click', () => {
+      secretHelpPinned = !secretHelpPinned
+      showSecretTip(secretHelpPinned)
+    })
+    document.addEventListener('pointerdown', event => {
+      if (!help.contains(event.target)) showSecretTip(false)
+    })
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !$('secret-help-tip').hidden) showSecretTip(false)
+    })
+  }
 
   // ---------- 客户端：Clash Verge / Mihomo 或 v2rayN（sing-box 内核） ----------
   const KIND_COPY = {
@@ -15,7 +54,7 @@
       lead: 'ClaudeGuard 只读取 Clash 的节点列表，不会改动你的订阅、全局节点或 Clash 设置。',
       controller: 'Clash 控制接口', controllerHint: 'Clash 设置里的 external-controller，不是代理端口。', idle: '读取 Clash Verge 的配置，并探测 127.0.0.1:9097 和 9090。',
       count: '先启动 Clash Verge / Mihomo', save: '保存并生成脚本', advanced: '高级：端口与原始扩展脚本', step3: '把生成的脚本导入 Clash',
-      tun: '要求 Clash 开启 TUN 才放行', result: 'ClaudeGuard 不会改写或重载 Clash 的任何文件，导入由你在 Clash 里完成。', placeholder: 'http://127.0.0.1:9097' },
+      tun: '要求 Clash 开启 TUN 才放行', result: '可以一键导入独立订阅，也可以按以上步骤手动导入。', placeholder: 'http://127.0.0.1:9097' },
     singbox: { stepper: ['识别 v2rayN', '固定出口节点', '生成规则并导入'], step1: '识别本机 v2rayN',
       lead: 'ClaudeGuard 只读取 v2rayN 生成的 sing-box 配置和控制接口，不会改动 v2rayN 的节点、路由或设置。',
       controller: 'sing-box 控制接口', controllerHint: 'sing-box 的 clash_api 地址，不是代理端口；v2rayN 开启 TUN 时会改用下一个端口。', idle: '读取 v2rayN 生成的 sing-box 配置，并探测 127.0.0.1:10813 和 10814。',
@@ -30,6 +69,8 @@
     document.querySelectorAll('.clash-only').forEach(el => { el.hidden = sb() })
     $('setup-form').dataset.kind = kind()
     $('howto-clash').hidden = sb(); $('howto-singbox').hidden = !sb()
+    $('verge-import').hidden = sb()
+    $('secret-help-clash').hidden = sb(); $('secret-help-singbox').hidden = !sb()
     syncExitMode()
   }
   function setKind(value) {
@@ -50,6 +91,7 @@
   function step(n) {
     if (n === 3 && !store.settings) n = 2
     store.wizardStep = n
+    showSecretTip(false)
     document.querySelectorAll('.wizard-step').forEach(el => { el.hidden = Number(el.dataset.step) !== n })
     document.querySelectorAll('#stepper li').forEach(li => {
       const at = Number(li.dataset.step)
@@ -76,12 +118,13 @@
   }
   async function detect() {
     const box = $('detect-box'), button = $('detect-clash'), singbox = sb(), copy = KIND_COPY[kind()]
+    const request = ++detectionRequest
     box.dataset.status = 'checking'
     GN.text('detect-title', singbox ? '正在识别本机 v2rayN…' : '正在识别本机 Clash…'); GN.text('detect-detail', copy.idle)
-    button.disabled = true
+    GN.setBusy(button, true)
     try {
       const result = await GN.call(singbox ? 'detectV2rayn' : 'detectClash')
-      if (sb() !== singbox) return // 识别途中换了客户端
+      if (request !== detectionRequest) return // 识别途中换了客户端
       store.detected = { ...result, kind: kind() }
       box.dataset.status = ['xray', 'wrong-kind'].includes(result.status) ? 'disabled' : result.status
       const table = singbox ? DETECT_V2RAYN : DETECT_COPY
@@ -96,9 +139,12 @@
       }
       if (result.status === 'found') GN.text('node-count', '已识别，可以读取节点')
     } catch (error) {
+      if (request !== detectionRequest) return
       box.dataset.status = 'not-found'
       GN.text('detect-title', '识别没有完成'); GN.text('detect-detail', error.message)
-    } finally { button.disabled = false }
+    } finally {
+      if (request === detectionRequest) GN.setBusy(button, false)
+    }
   }
 
   // ---------- 第 2 步 ----------
@@ -129,18 +175,20 @@
   function setEntryBy(value) {
     entryBy = value
     document.querySelectorAll('[data-entry]').forEach(b => b.classList.toggle('active', b.dataset.entry === value))
-    $('relay-node-list').hidden = value !== 'nodes'
+    $('relay-node-picker').hidden = value !== 'nodes'
     $('relay-keyword').hidden = value !== 'keyword'
     entryCount()
   }
-  const selectedEntries = () => [...document.querySelectorAll('#relay-node-list input:checked')].map(box => box.value)
+  const entryOptions = () => [...$('relay-node-list').querySelectorAll('input[type=checkbox]')]
+  const selectedEntries = () => entryOptions().filter(box => box.checked).map(box => box.value)
   function renderEntryNodes(chosen) {
-    const list = $('relay-node-list'), usable = store.nodes.filter(n => !n.chainError && !n.upstreamChain?.length)
+    const list = $('relay-node-list'), usable = store.nodes.filter(n => n.relayEligible)
+    const selected = new Set(chosen)
     list.replaceChildren()
-    if (!usable.length) { list.append(node('p', store.nodes.length ? '没有可做入口的具体节点。' : '请先在第 1 步读取节点。', 'empty')); return }
+    if (!usable.length) list.append(node('p', store.nodes.length ? '没有可做入口的具体节点。' : '请先在第 1 步读取节点。', 'empty'))
     for (const n of usable) {
       const row = node('label', undefined, 'node-option'), box = node('input')
-      box.type = 'checkbox'; box.value = n.name; box.checked = chosen.includes(n.name)
+      box.type = 'checkbox'; box.value = n.name; box.checked = selected.has(n.name)
       box.addEventListener('change', entryCount)
       row.append(box, node('span', n.name, 'node-name'), node('span', n.type || '', 'node-type'))
       list.append(row)
@@ -148,8 +196,13 @@
     entryCount()
   }
   function entryCount() {
-    const n = selectedEntries().length
-    const lead = entryBy === 'keyword' ? '名称包含这个关键词的节点都会成为候选入口。' : n ? `已选 ${n} 个候选入口。` : ''
+    const options = entryOptions(), n = options.filter(box => box.checked).length
+    const selectAll = $('relay-select-all')
+    selectAll.disabled = options.length === 0
+    selectAll.checked = n > 0 && n === options.length
+    selectAll.indeterminate = n > 0 && n < options.length
+    const limitHint = n > maxRelayEntries ? `最多可手动保存 ${maxRelayEntries} 个，更多节点可改用关键词。` : ''
+    const lead = entryBy === 'keyword' ? '名称包含这个关键词的节点都会成为候选入口。' : n ? `已选 ${n} 个候选入口。${limitHint}` : ''
     GN.text('relay-entry-hint', lead + '多选的节点只是候选，都放进 Clash 的「入口选择」手动组，ClaudeGuard 不会自动切换：当前入口失效时 Claude 会被阻断，需要你在 Clash 里把「入口选择」切到另一个候选。')
   }
 
@@ -179,6 +232,7 @@
     }
     if (input.exitMode === 'relay') {
       if (entryBy === 'keyword' ? !input.entry.keyword : !input.entry.nodes?.length) return '请至少勾选一个入口节点，或填写名称关键词。'
+      if (input.entry.nodes?.length > maxRelayEntries) return `最多可手动保存 ${maxRelayEntries} 个入口节点。请取消部分勾选，或改用关键词。`
       if (!input.relayLink && (!input.exit.host || !input.exit.port)) return '请粘贴 SOCKS5 链接，或填写出口地址和端口。'
     } else {
       if (!input.selectedProxy) return '请选择 Claude 使用的固定节点。'
@@ -221,7 +275,7 @@
     syncExitMode()
     if (!store.nodes.length) {
       const chosen = settings.relay?.nodes || []
-      if (chosen.length) store.nodes = chosen.map(name => ({ name, upstreamChain: [] }))
+      if (chosen.length) store.nodes = chosen.map(name => ({ name, upstreamChain: [], relayEligible: true }))
       if (!settings.relay && settings.selectedProxy) { $('selected-proxy').replaceChildren(new Option(settings.selectedProxy, settings.selectedProxy)); $('selected-proxy').value = settings.selectedProxy }
     }
     renderEntryNodes(settings.relay?.nodes || [])
@@ -240,9 +294,11 @@
     const running = !!store.settings && s.state !== 'unconfigured'
     const gate = store.state.indicator?.key === 'protected'
     const singbox = store.settings?.backendKind === 'singbox'
+    const conflict = s.reason === 'personal-guard-conflict'
     const rows = [
       ['守护服务已启动', running, running ? '运行中' : s.startError ? '未启动' : '等待'],
-      [singbox ? 'v2rayN 已载入守护规则' : 'Clash 已载入守护规则', !!s.prepared, s.prepared ? '已载入' : s.phase === 'awaiting-rules' ? '等待导入' : '等待'],
+      [singbox ? 'v2rayN 已载入守护规则' : 'Clash 已载入守护规则', !conflict && !!s.prepared,
+        conflict ? '规则冲突' : s.prepared ? '已载入' : s.phase === 'awaiting-rules' ? '等待导入' : '等待'],
       ['规则模式与 TUN', s.tunEnabled === true && s.reason !== 'rule-mode-required', s.tunEnabled === true ? '已开启' : s.tunEnabled === false ? '需开启 TUN'
         : singbox && s.reason === 'tun-status-unavailable' ? '无法确认' : '等待'],
     ]
@@ -252,7 +308,7 @@
     }
     const ip = s.last?.ip
     rows.push([relay ? '实测出口 IPv4' : '固定出口验证', gate || (relay && !!ip), gate ? ip || '已放行' : ip ? `${ip}${relay ? ' · 待确认' : ''}` : '等待'])
-    const bad = label => /未通过|需开启|未启动/.test(label)
+    const bad = label => /未通过|需开启|未启动|规则冲突/.test(label)
     GN.patch($('setup-checks'), rows, () => rows.map(([title, done, label]) => {
       const li = node('li', undefined, `check ${done ? 'good' : bad(label) ? 'bad' : 'pending'}`)
       li.append(node('span', title, 'check-name'), node('span', label, 'check-state'))
@@ -261,17 +317,22 @@
   }
 
   function bind() {
+    bindSecretHelp()
     document.querySelectorAll('input[name="exit-mode"]').forEach(radio => radio.addEventListener('change', syncExitMode))
     document.querySelectorAll('input[name="client-kind"]').forEach(radio => radio.addEventListener('change', () => { resetDetection(); syncKind(); detect() }))
     GN.on('sb-second-port', 'input', secondPortHint)
     document.querySelectorAll('[data-entry]').forEach(button => button.addEventListener('click', () => setEntryBy(button.dataset.entry)))
+    GN.on('relay-select-all', 'change', event => {
+      for (const option of entryOptions()) option.checked = event.target.checked
+      entryCount()
+    })
     GN.on('detect-clash', 'click', detect)
     GN.on('setup-back', 'click', () => GN.go('guard'))
     GN.on('wiz-back-1', 'click', () => step(1))
     GN.on('wiz-back-2', 'click', () => step(2))
     GN.on('wiz-finish', 'click', () => GN.go('guard'))
     GN.on('load-nodes', 'click', () => GN.busy($('load-nodes'), async () => {
-      const previous = $('selected-proxy').value, chosen = selectedEntries().length ? selectedEntries() : store.settings?.relay?.nodes || []
+      const previous = $('selected-proxy').value, chosen = entryOptions().length ? selectedEntries() : store.settings?.relay?.nodes || []
       const result = await GN.call('catalogue', setupInput())
       if (sb()) {
         const list = $('sb-nodes'); list.replaceChildren()
@@ -283,6 +344,7 @@
         step(2); return
       }
       store.nodes = result.nodes
+      maxRelayEntries = result.maxRelayEntries
       $('selected-proxy').replaceChildren(new Option('请选择具体节点', ''))
       for (const n of store.nodes) { const option = new Option(n.name + (n.chainError ? '（链路不可用）' : ''), n.name); option.disabled = !!n.chainError; $('selected-proxy').add(option) }
       $('selected-proxy').value = previous || store.settings?.selectedProxy || ''
@@ -307,7 +369,7 @@
             GN.text('setup-result', '已保存并生成规则。按左侧步骤在 v2rayN 导入网关节点和路由规则，并开启 TUN。')
             GN.toast('配置已保存。下一步：在 v2rayN 导入网关节点和路由规则。')
           } else {
-            GN.text('setup-result', '已保存并生成脚本。复制后粘贴到 Clash Verge 的全局扩展脚本，重载配置并开启 TUN。')
+            GN.text('setup-result', '已保存并生成脚本。可以一键导入独立订阅，也可以手动导入。')
             GN.toast('配置已保存。下一步：把生成的脚本导入 Clash。')
           }
         } catch (error) {
@@ -316,12 +378,16 @@
           store.settings = (await GN.call('boot')).settings
           GN.text('setup-result', error.message)
           GN.toast(error.message)
-        } finally {
-          $('relay-link').value = ''; $('relay-user').value = ''; $('relay-password').value = ''; $('controller-secret').value = ''
         }
+        $('relay-link').value = ''; $('relay-user').value = ''; $('relay-password').value = ''; $('controller-secret').value = ''
         step(3); GN.renderState()
       })
     })
+    GN.on('import-verge', 'click', () => GN.busy($('import-verge'), async () => {
+      const { name } = await GN.call('importVergeSubscription')
+      GN.text('setup-result', `已导入「${name}」。请重新打开 Clash Verge，选中该订阅并开启 TUN。`)
+      GN.toast(`已导入「${name}」`)
+    }))
     GN.on('copy-script', 'click', () => GN.busy($('copy-script'), async () => { await GN.call('copyScript'); GN.toast('已复制。粘贴到 Clash Verge → 订阅 → 全局扩展脚本；2 分钟后自动清空剪贴板。') }))
     GN.on('reveal-script', 'click', () => GN.call('revealScript'))
     GN.on('copy-gw-link', 'click', () => GN.busy($('copy-gw-link'), async () => { await GN.call('copyTemplate', 'gateway-link'); GN.toast('已复制网关节点链接。在 v2rayN 服务器列表按 Ctrl+V 导入；2 分钟后自动清空剪贴板。') }))

@@ -71,13 +71,18 @@
   async function load(force = false) {
     if (env.loading) return env.loading
     if (env.loaded && !force) return
+    const button = $('env-refresh')
+    GN.setBusy(button, true)
     env.loading = (async () => {
       try {
         const [audit, history] = await Promise.all([GN.call('envCheck'), GN.call('envHistory')])
         env.audit = audit; env.history = history.history; env.loaded = true; env.error = null
       } catch (error) { env.error = error.message }
       render(); renderHistory()
-    })().finally(() => { env.loading = null })
+    })().finally(() => {
+      env.loading = null
+      GN.setBusy(button, false)
+    })
     return env.loading
   }
 
@@ -194,7 +199,7 @@
     $('env-refresh').insertAdjacentHTML('afterbegin', icon('refresh'))
     $('env-repair').insertAdjacentHTML('afterbegin', icon('wrench'))
     $('env-target').insertAdjacentHTML('afterbegin', icon('sliders'))
-    GN.on('env-refresh', 'click', () => GN.busy($('env-refresh'), () => load(true)))
+    GN.on('env-refresh', 'click', () => load(true))
     GN.on('env-repair', 'click', () => openRepair($('env-repair')))
     GN.on('env-confirm', 'click', confirm)
     GN.on('env-cancel', 'click', () => dialog().close())

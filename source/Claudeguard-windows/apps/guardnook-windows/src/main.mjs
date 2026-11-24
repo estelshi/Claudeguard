@@ -5,17 +5,20 @@ import { readFile, stat, writeFile } from 'node:fs/promises'
 import { isIP } from 'node:net'
 import { ensureDataDirectory, readJSON, readTheme, writeTheme, THEME_CHROME } from './storage.mjs'
 import { privateDirectory } from './private-dir.mjs'
-import { createRuntime } from './runtime.mjs'
+import { createRuntime, describeSetupError } from './runtime.mjs'
 import { protectionIndicator, tintTaskbarBitmap, trayMenuKey, trayMenuItems } from './taskbar.mjs'
 import { createRelayVault } from './relay-vault.mjs'
 import { detectClash, detectV2rayN } from './clash-detect.mjs'
 import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { createEnvironment } from './win-environment.mjs'
+import { importVergeSubscription } from './verge-import.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const uiPath = join(here, '../renderer/index.html')
 const uiURL = pathToFileURL(uiPath).href
 const smoke = !app.isPackaged && process.argv.includes('--smoke-test')
+const execute = promisify(execFile)
 // Keep the existing Windows settings and safeStorage files across the rename.
 app.setName('ClaudeGuard')
 if (process.platform === 'win32') app.setAppUserModelId('local.guardnook.share.windows')
@@ -99,7 +102,10 @@ else {
       if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url.split('#')[0] !== uiURL) throw new Error('不允许的调用来源')
       if (JSON.stringify(input ?? null).length > 1024 * 1024) return { ok: false, error: '请求过大' }
       try { return { ok: true, value: await (mutates ? enqueue(() => handler(input)) : handler(input)) } }
-      catch (error) { return { ok: false, error: /[\u3400-\u9fff]/.test(error.message) ? error.message : '操作未完成，请检查节点、接口、权限和端口设置。' } }
+      catch (error) {
+        if (name === 'catalogue' || name === 'save-setup') return { ok: false, error: describeSetupError(error) }
+        return { ok: false, error: /[\u3400-\u9fff]/.test(error.message) ? error.message : '操作未完成，请检查节点、接口、权限和端口设置。' }
+      }
     })
   }
   async function networkProbes() {
@@ -198,6 +204,23 @@ else {
       return manifest.scriptPath
     }
     safeHandle('reveal-script', async () => { shell.showItemInFolder(await generatedScript()) })
+    safeHandle('import-verge-subscription', async () => {
+      if (process.platform !== 'win32') throw new Error('当前为 macOS 预览，请在 Windows 版中执行一键导入。')
+      const settings = runtime.settings()
+      if (!settings || settings.backendKind === 'singbox') throw new Error('请先保存 Clash 的守护配置。')
+      const path = await generatedScript()
+      const info = await stat(path)
+      if (!info.isFile() || info.size > 2 * 1024 * 1024) throw new Error('生成脚本异常，请重新保存配置。')
+      const vergeDir = join(app.getPath('appData'), 'io.github.clash-verge-rev.clash-verge-rev')
+      return importVergeSubscription({
+        settings, vergeDir, backupDir: directory, script: await readFile(path, 'utf8'),
+        isRunning: async () => {
+          const tasklist = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tasklist.exe')
+          const { stdout } = await execute(tasklist, ['/FO', 'CSV', '/NH'], { windowsHide: true, timeout: 5000 })
+          return /^"clash[ -]verge\.exe",/im.test(stdout)
+        },
+      })
+    }, true)
     // 复制生成的脚本（含本机网关凭据，中转有账号时也含出口凭据）；2 分钟后若剪贴板未变则清空
     safeHandle('copy-script', async () => {
       const path = await generatedScript(), info = await stat(path)

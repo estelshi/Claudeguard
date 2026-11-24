@@ -44,10 +44,16 @@ window.GN = window.GN || {}
     if (!result.ok) throw new Error(result.error)
     return result.value
   }
+  GN.setBusy = (button, busy) => {
+    button.disabled = busy
+    button.classList.toggle('is-busy', busy)
+    if (busy) button.setAttribute('aria-busy', 'true')
+    else button.removeAttribute('aria-busy')
+  }
   GN.busy = async (button, operation) => {
-    button.disabled = true; button.classList.add('is-busy')
+    GN.setBusy(button, true)
     try { return await operation() } catch (error) { GN.toast(error.message) }
-    finally { button.disabled = false; button.classList.remove('is-busy') }
+    finally { GN.setBusy(button, false) }
   }
   GN.on = (id, event, handler) => {
     GN.$(id).addEventListener(event, async e => { try { await handler(e) } catch (error) { GN.toast(error.message) } })

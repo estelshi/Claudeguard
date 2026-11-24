@@ -15,11 +15,19 @@
   }
 
   // 守护页打开时自动测一次；结果 2 分钟过期后再测，不和手动「重新检测」并发
-  let inflight = false, lastAuto = 0
+  let lastAuto = 0
+  async function refresh() {
+    const button = $('probe-refresh')
+    if (button.disabled) return
+    lastAuto = Date.now()
+    GN.setBusy(button, true)
+    try {
+      store.state.probes = await GN.call('probes')
+      render()
+    } finally { GN.setBusy(button, false) }
+  }
   function autoProbe() {
-    if (inflight || Date.now() - lastAuto < 120000) return
-    lastAuto = Date.now(); inflight = true
-    GN.call('probes').then(value => { store.state.probes = value; render() }).catch(() => {}).finally(() => { inflight = false })
+    if (Date.now() - lastAuto >= 120000) refresh().catch(() => {})
   }
 
   function render() {
@@ -36,7 +44,7 @@
   }
 
   function bind() {
-    GN.on('probe-refresh', 'click', () => GN.busy($('probe-refresh'), async () => { inflight = true; lastAuto = Date.now(); try { store.state.probes = await GN.call('probes') } finally { inflight = false } render() }))
+    GN.on('probe-refresh', 'click', refresh)
   }
 
   GN.render.network = { render, bind }

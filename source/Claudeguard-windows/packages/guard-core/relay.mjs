@@ -8,6 +8,7 @@ const execute = promisify(execFile)
 export const relayEntry = '入口选择'
 export const relayExitGroup = '出口选择'
 export const relayExit = 'GN-Exit'
+export const maxRelayEntries = 64
 export const entryTestURL = 'https://www.gstatic.com/generate_204'
 export const reasonActions = Object.freeze({
   entry_unavailable: { text: '没有可用的入口节点。订阅更新后，原节点名也可能已失效。', action: '重新选择入口' },
@@ -48,7 +49,7 @@ export function normalizeRelay(input) {
     throw new Error('中转配置无效，请重新生成脚本。')
   const keyword = typeof input.keyword === 'string' ? input.keyword.trim() : ''
   const nodes = input.nodes ?? []
-  if (!Array.isArray(nodes) || nodes.length > 64 || nodes.some(name => !isRelayEntryName(name))
+  if (!Array.isArray(nodes) || nodes.length > maxRelayEntries || nodes.some(name => !isRelayEntryName(name))
     || keyword.length > 100 || /[\r\n\0,]/.test(keyword) || Boolean(keyword) === Boolean(nodes.length))
     throw new Error('请选择入口节点，或填写一个名称关键词。')
   return Object.freeze({ id: input.id, host, port, checkPort: input.checkPort, auth: input.auth,

@@ -70,5 +70,8 @@
       "artifactName": "ClaudeGuard-${version}-windows-${arch}-setup.${ext}"
     },
     "publish": null
+  },
+  "dependencies": {
+    "js-yaml": "4.2.0"
   }
 }

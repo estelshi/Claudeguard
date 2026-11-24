@@ -8,8 +8,12 @@ export const RETRYABLE_RENAME = new Set(['EPERM', 'EBUSY', 'EACCES'])
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 export async function atomicJSON(path, value, { rename = fsRename, attempts = 6, backoffMs = 40 } = {}) {
+  return atomicText(path, JSON.stringify(value, null, 2), { rename, attempts, backoffMs })
+}
+
+export async function atomicText(path, text, { rename = fsRename, attempts = 6, backoffMs = 40 } = {}) {
   const temporary = `${path}.${randomBytes(8).toString('hex')}.tmp`
-  await writeFile(temporary, JSON.stringify(value, null, 2), { mode: 0o600, flag: 'wx' })
+  await writeFile(temporary, text, { mode: 0o600, flag: 'wx' })
   try {
     for (let attempt = 1; ; attempt++) {
       try { await rename(temporary, path); return }
