@@ -2,7 +2,9 @@
    设计语言移植自早先的 Hark 重设计：浅色为默认，浅灰白底、细线、
    黑色胶囊导航、彩色渐变卡片、超大细体数字。内容容器间距 14px，首页守护首屏间距 28px。
    字重：标题 600、标签 500–600、正文 400、大数字 300。
-   选中 / 聚焦只有一种样式：白底 + 1px 墨色描边 + 3px 浅光圈。
+   选中 = 抬起：白底 + 柔和分层阴影 + 最多一条发丝线，不用墨色描边；聚焦 = 低对比柔光圈（4px）。
+   勾选 / 单选用同一家族：6px 圆角墨色实心 + 白色描出的对勾；强调色只做小点或对勾。
+   交互动效统一 160–260ms、cubic-bezier(.2,.8,.2,1)，无回弹无发光；prefers-reduced-motion 时全部关闭。
    深色模式（设置 → 外观）见文件末尾：<html data-theme="dark"> 时覆盖颜色，间距与字重不变。 */
 @font-face{font-family:"GN PuHuiTi";src:url("fonts/AlibabaPuHuiTi-3-45-Light.woff2") format("woff2");font-weight:300;font-style:normal;font-display:block}
 @font-face{font-family:"GN PuHuiTi";src:url("fonts/AlibabaPuHuiTi-3-55-Regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:block}
@@ -25,8 +27,28 @@
   --sunset:linear-gradient(140deg,#f59ac8 0%,#fba79a 50%,#ffbe6e 100%);
   --blue:linear-gradient(140deg,#8fd0fb 0%,#6aa6f5 55%,#5b83ee 100%);
   --radius:20px;--sec:28px;--group:12px;--container-gap:14px;
-  --ring:0 0 0 3px rgba(22,24,28,.08);--ring-focus:0 0 0 3px rgba(22,24,28,.16);
+  --ring:0 0 0 4px rgba(22,26,33,.05);--ring-focus:0 0 0 3px rgba(22,26,33,.12);
   --shadow:0 1px 2px rgba(20,24,30,.03),0 8px 24px -12px rgba(20,24,30,.10);
+  /* 交互层：抬起阴影、发丝线、控件状态色、动效曲线 */
+  --ease:cubic-bezier(.2,.8,.2,1);--t-fast:160ms;--t:200ms;--t-slow:260ms;
+  --lift:0 1px 2px rgba(20,24,30,.05),0 4px 10px -4px rgba(20,24,30,.07),0 14px 28px -16px rgba(20,24,30,.20);
+  --lift-soft:0 1px 2px rgba(20,24,30,.04),0 8px 18px -12px rgba(20,24,30,.16);
+  --btn-shadow:0 1px 2px rgba(20,24,30,.04);
+  --ink-shadow:0 1px 2px rgba(10,12,16,.16),0 8px 18px -10px rgba(10,12,16,.42);
+  --ink-shadow-hover:0 1px 2px rgba(10,12,16,.18),0 12px 24px -12px rgba(10,12,16,.50);
+  --ink-shadow-press:0 1px 1px rgba(10,12,16,.20);
+  --hairline:rgba(22,26,33,.05);--surface:#fff;--on-ink:#fff;
+  --field-hover:rgba(251,251,252,.96);--focus-line:rgba(22,26,33,.20);--placeholder-focus:#c6c9ce;
+  --box-line:rgba(22,26,33,.20);--box-line-hover:rgba(22,26,33,.38);
+  --picker-bg:rgba(22,26,33,.018);--row-hover:rgba(255,255,255,.62);--row-selected:#fff;
+  --card-rest:rgba(255,255,255,.55);--card-hover:rgba(255,255,255,.85);
+  --focus-gap:#f6f7f8;--focus-halo:rgba(22,26,33,.24);
+  --thumb-ink:var(--ink);--seg-thumb:#fff;--seg-thumb-shadow:0 1px 2px rgba(20,24,30,.08),0 4px 10px -6px rgba(20,24,30,.18);
+  --track:#dfe2e7;--track-hover:#d3d7dd;
+  --bad-line:rgba(229,72,77,.42);--bad-field:rgba(229,72,77,.035);--bad-ring:0 0 0 4px rgba(229,72,77,.10);
+  --row-band:rgba(22,26,33,.03);
+  /* 对勾形状（遮罩用 data URI：遮罩图片按 CORS 加载，file:// 下的外部 svg 会被拒） */
+  --check:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.6 6.3l2.3 2.3 4.6-5' fill='none' stroke='%23000' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 *,*::before,*::after{box-sizing:border-box}
 html,body{height:100%}
@@ -44,35 +66,66 @@ small{font-size:11.5px;color:var(--muted);font-weight:400}
 .empty{color:var(--faint);font-size:12px;padding:16px 0}
 
 /* ---------- 聚焦与选中 ---------- */
-button:focus-visible,summary:focus-visible{outline:none;box-shadow:var(--ring-focus)}
-input,select{border:1px solid var(--line);background:var(--field);border-radius:12px;padding:10px 12px;min-width:0;width:100%;transition:border-color .15s,background .15s,box-shadow .15s}
-input:hover,select:hover{border-color:var(--line-strong)}
-input:focus,select:focus{outline:none;background-color:#fff;border-color:var(--ink);box-shadow:var(--ring)}
-input:disabled{opacity:.55}
+button:focus-visible,summary:focus-visible{outline:none;box-shadow:0 0 0 2px var(--focus-gap),0 0 0 4px var(--focus-halo)}
+/* 输入框：胶囊形，静止 = 浅灰底 + 发丝线；悬停提亮；聚焦 = 白底 + 低对比 4px 柔光圈 + 轻微抬起 */
+input,select{border:1px solid var(--line);background:var(--field);border-radius:99px;padding:10px 16px;min-width:0;width:100%;caret-color:var(--ink);
+  transition:border-color var(--t) var(--ease),background-color var(--t) var(--ease),box-shadow var(--t) var(--ease),color var(--t) var(--ease)}
+::placeholder{color:var(--faint);opacity:1;transition:color var(--t) var(--ease)}
+:is(input:not([type=checkbox],[type=radio]),select):hover:not(:disabled,:focus){background-color:var(--field-hover);border-color:var(--line-strong)}
+:is(input:not([type=checkbox],[type=radio]),select):focus{outline:none;background-color:var(--surface);border-color:var(--focus-line);box-shadow:var(--ring),var(--lift-soft)}
+input:focus::placeholder{color:var(--placeholder-focus)}
+input:not([type=checkbox],[type=radio]):not(:placeholder-shown){color:var(--ink)}
+/* 错误：用户改过且不合法（:user-invalid），或视图标记 aria-invalid */
+:is(input:not([type=checkbox],[type=radio]),select):is(:user-invalid,[aria-invalid=true]){border-color:var(--bad-line);background-color:var(--bad-field)}
+:is(input:not([type=checkbox],[type=radio]),select):is(:user-invalid,[aria-invalid=true]):focus{box-shadow:var(--bad-ring)}
+label:has(>input:is(:user-invalid,[aria-invalid=true]))>small{color:var(--bad-ink)}
+:is(input:not([type=checkbox],[type=radio]),select):disabled{opacity:.5;cursor:not-allowed;background-color:var(--chip);border-color:transparent}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 select{appearance:none;padding-right:30px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 52%,calc(100% - 10px) 52%;background-size:5px 5px;background-repeat:no-repeat}
-input[type=checkbox]{appearance:none;width:18px;height:18px;border:1.5px solid var(--line-strong);border-radius:6px;background:#fff;padding:0;cursor:pointer;display:grid;place-content:center;flex:none}
-input[type=checkbox]:checked{background:var(--ink);border-color:var(--ink)}
-input[type=checkbox]:checked::after{content:"";width:8px;height:4px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
-input[type=checkbox]:focus-visible{box-shadow:var(--ring-focus)}
-input[role=switch]{width:38px;height:22px;border-radius:99px;border:0;background:#dfe2e7;position:relative;transition:background .2s}
-input[role=switch]::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border:0;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.18);transform:none;transition:left .2s}
+/* 复选框：6px 圆角；勾选 = 墨色实心 + 白色对勾从左往右描出；无外圈光晕 */
+input[type=checkbox]:not([role=switch]){appearance:none;width:18px;height:18px;border:1.5px solid var(--box-line);border-radius:6px;background:var(--surface);padding:0;cursor:pointer;display:grid;place-content:center;flex:none;
+  transition:background-color var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease),box-shadow var(--t-fast) var(--ease)}
+input[type=checkbox]:not([role=switch])::after{content:"";width:12px;height:12px;background:var(--on-ink);-webkit-mask:var(--check) center/12px 12px no-repeat;mask:var(--check) center/12px 12px no-repeat;
+  clip-path:inset(0 100% 0 0);transition:clip-path var(--t) var(--ease)}
+input[type=checkbox]:not([role=switch]):hover:not(:disabled,:checked,:indeterminate){border-color:var(--box-line-hover)}
+input[type=checkbox]:not([role=switch]):is(:checked,:indeterminate){background:var(--ink);border-color:var(--ink)}
+input[type=checkbox]:not([role=switch]):checked::after{clip-path:inset(0)}
+input[type=checkbox]:not([role=switch]):indeterminate::after{width:8px;height:2px;border-radius:1px;-webkit-mask:none;mask:none;clip-path:inset(0)}
+input[type=checkbox]:not([role=switch]):focus-visible{outline:none;box-shadow:var(--ring-focus)}
+input[type=checkbox]:not([role=switch]):disabled{opacity:.4;cursor:default}
+/* 开关：滑块用 transform 平移；按下时滑块略微拉宽 */
+input[role=switch]{appearance:none;flex:none;padding:0;cursor:pointer;width:38px;height:22px;border-radius:99px;border:0;background:var(--track);position:relative;
+  transition:background-color var(--t) var(--ease),box-shadow var(--t) var(--ease)}
+input[role=switch]::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.18);
+  transition:transform var(--t) var(--ease),width var(--t-fast) var(--ease),background-color var(--t) var(--ease)}
+input[role=switch]:hover:not(:disabled,:checked){background:var(--track-hover)}
 input[role=switch]:checked{background:var(--ink)}
-input[role=switch]:checked::after{left:19px;width:16px;height:16px;border:0;transform:none}
+input[role=switch]:checked::after{transform:translateX(16px)}
+input[role=switch]:active:not(:disabled)::after{width:19px}
+input[role=switch]:checked:active:not(:disabled)::after{transform:translateX(13px)}
+input[role=switch]:focus-visible{outline:none;box-shadow:0 0 0 2px var(--focus-gap),0 0 0 4px var(--focus-halo)}
 input[role=switch]:disabled{opacity:.45;cursor:default}
 
 /* ---------- 按钮 ---------- */
 .btn-icon{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-.pill-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:36px;padding:0 16px;border-radius:99px;background:var(--glass-strong);border:1px solid var(--line);color:var(--ink);font-size:12.5px;font-weight:500;white-space:nowrap;transition:background .15s,border-color .15s,transform .1s}
-.pill-button:hover:not(:disabled){background:#fff;border-color:var(--line-strong)}
-.pill-button:active:not(:disabled){transform:scale(.98)}
-.pill-button.primary{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:600}
-.pill-button.primary:hover:not(:disabled){background:#000}
+.pill-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:36px;padding:0 16px;border-radius:99px;background:var(--glass-strong);border:1px solid var(--line);color:var(--ink);font-size:12.5px;font-weight:500;white-space:nowrap;box-shadow:var(--btn-shadow);
+  transition:background-color var(--t) var(--ease),border-color var(--t) var(--ease),box-shadow var(--t) var(--ease),color var(--t) var(--ease),transform var(--t-fast) var(--ease),opacity var(--t) var(--ease)}
+.pill-button:hover:not(:disabled){background:var(--surface);border-color:var(--line-strong);box-shadow:var(--lift-soft)}
+.pill-button:active:not(:disabled){transform:scale(.98);box-shadow:var(--btn-shadow)}
+.pill-button:disabled{box-shadow:none}
+.pill-button.primary{background:var(--ink);border-color:var(--ink);color:var(--on-ink);font-weight:600;box-shadow:var(--ink-shadow)}
+.pill-button.primary:hover:not(:disabled){background:#000;box-shadow:var(--ink-shadow-hover)}
+.pill-button.primary:active:not(:disabled){box-shadow:var(--ink-shadow-press)}
+.pill-button.primary:disabled{box-shadow:none}
+.pill-button:focus-visible{box-shadow:0 0 0 2px var(--focus-gap),0 0 0 4px var(--focus-halo)}
+.pill-button.is-busy,.pill-button[aria-busy=true]{cursor:progress}
 .pill-button.small{height:30px;padding:0 13px;font-size:12px;gap:6px}
 .pill-button.small .btn-icon{width:14px;height:14px}
 .pill-button.is-busy,.tool.is-busy{opacity:.6}
-.pill-button.danger{background:var(--bad-tint);border-color:transparent;color:var(--bad-ink);font-weight:600}
-.pill-button.danger:hover:not(:disabled){background:rgba(226,72,72,.14);border-color:transparent}
+.pill-button.danger{background:var(--bad-tint);border-color:transparent;color:var(--bad-ink);font-weight:600;box-shadow:none}
+.pill-button.danger:hover:not(:disabled){background:rgba(226,72,72,.14);border-color:transparent;box-shadow:var(--lift-soft)}
+.pill-button.danger:active:not(:disabled){background:rgba(226,72,72,.18);box-shadow:none}
+.pill-button.danger:focus-visible{box-shadow:0 0 0 2px var(--focus-gap),0 0 0 4px rgba(229,72,77,.30)}
 .inline-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .tag{display:inline-flex;align-items:center;height:24px;padding:0 11px;border-radius:99px;font-size:11px;font-weight:600;background:var(--chip);color:var(--text);white-space:nowrap}
 .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
@@ -95,10 +148,16 @@ input[role=switch]:disabled{opacity:.45;cursor:default}
 .mark{width:17px;height:17px;background:url(assets/icon.svg) center/contain no-repeat;flex:none}
 main{flex:1;min-height:0;overflow-y:auto;border-top:1px solid rgba(22,26,33,.06);display:flex;flex-direction:column;padding:0 30px var(--sec);scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.12) transparent}
 .content-bar{display:flex;align-items:center;padding-top:18px}
-.pills{display:flex;gap:4px;padding:4px;border-radius:99px;background:#fff;border:1px solid var(--line);box-shadow:0 1px 2px rgba(20,24,30,.04)}
-.pills button{height:32px;padding:0 16px;border-radius:99px;font-size:12.5px;font-weight:500;color:var(--text);transition:background .15s,color .15s}
+.pills{position:relative;display:flex;gap:4px;padding:4px;border-radius:99px;background:#fff;border:1px solid var(--line);box-shadow:0 1px 2px rgba(20,24,30,.04)}
+.pills button{height:32px;padding:0 16px;border-radius:99px;font-size:12.5px;font-weight:500;color:var(--text);transition:background-color var(--t) var(--ease),color var(--t) var(--ease),box-shadow var(--t) var(--ease)}
 .pills button:hover:not(.active){background:rgba(22,26,33,.05)}
-.pills button.active{background:var(--ink);color:#fff;font-weight:600}
+.pills button.active{background:var(--thumb-ink);color:var(--on-ink);font-weight:600}
+/* 滑块：motion.js 量出当前项位置写入 --thumb-*，滑块在选项之间平移；未量出前仍按原样给当前项上色 */
+:is(.pills,.seg-mini,.stepper).has-thumb{isolation:isolate}
+:is(.pills,.seg-mini,.stepper).has-thumb::before{content:"";position:absolute;z-index:-1;left:0;top:var(--thumb-y);width:var(--thumb-w);height:var(--thumb-h);border-radius:99px;
+  background:var(--thumb-ink);transform:translateX(var(--thumb-x));transition:transform var(--t-slow) var(--ease),width var(--t-slow) var(--ease),background-color var(--t) var(--ease)}
+:is(.pills,.seg-mini,.stepper).thumb-still::before{transition:none}
+:is(.pills,.stepper).has-thumb>.active,.seg-mini.has-thumb>.active{background:transparent;box-shadow:none}
 
 /* ---------- 页面节奏：区块之间统一 28px，内容从上排 ---------- */
 .tab{flex:1 0 auto;display:flex;flex-direction:column;gap:var(--container-gap);padding-top:var(--container-gap)}
@@ -132,47 +191,170 @@ h2{font-size:13px;font-weight:600;color:var(--ink)}
 .state-badge{position:relative;width:64px;height:64px;border-radius:18px;display:grid;place-items:center;flex:none;touch-action:none;
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.35),0 6px 16px -10px rgba(20,24,30,.35);transition:background .2s}
 .state-badge::after{content:"";position:absolute;inset:0;border-radius:inherit;background:radial-gradient(80% 60% at 20% 0%,rgba(255,255,255,.45),transparent 60%);pointer-events:none}
-.state-badge:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+.state-badge:focus{outline:none}
+.state-badge:focus-visible{outline:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.35),0 0 0 2px var(--focus-gap),0 0 0 4px var(--focus-halo)}
 #guard-summary[data-tone=good] .state-badge{background:linear-gradient(140deg,#8dbdbf 0%,#a6cfcb 55%,#c4e2da 100%)}
 #guard-summary[data-tone=warn] .state-badge{background:linear-gradient(140deg,#f8a7c6 0%,#fbb59c 50%,#ffd08a 100%)}
 #guard-summary[data-tone=bad] .state-badge{background:linear-gradient(140deg,#8f7ae8 0%,#b98ae6 55%,#ea9ec8 100%)}
 #guard-summary[data-tone=idle] .state-badge{background:linear-gradient(140deg,#d9dbe3 0%,#e6e3ee 55%,#efe9ef 100%)}
-.pixel-buddy{width:62px;height:48px;display:block;overflow:visible;pointer-events:none;transform-origin:50% 82.14%}
-/* 身体水平居中，垂直略低；压缩支点在平移后的脚底。 */
+/* ===== Clawd 动效系统（说明见 docs/clawd/CLAWD-MOTION.md） =====
+   节拍 T = 120ms：所有精灵时长都是 T 的整数倍（跳跃弧线按 T/2 采样）。
+   缓动只有一种：steps(1)。每一帧都是整格位移或换一张精灵帧，没有插值、没有旋转、没有缩放。
+   跳跃弧线由 guard.js 按 T/2 采样、取整到整格后同样逐帧播放。唯一的平滑变化是徽章底色交叉淡入和视线跟随。
+   优先级：data-clawd-motion（用户互动）> data-clawd-react（一次性状态反应）> data-clawd-busy（检测中）> data-tone（常驻状态）。 */
+.pixel-buddy{width:62px;height:48px;display:block;overflow:visible;pointer-events:none}
+/* 身体水平居中，垂直略低 */
 .pb-me{translate:0 -1.5px}
 :root:not([data-theme=dark]) .pb-me{translate:.5px -1.5px}
 .pb-gaze{transform:translate(var(--gaze-x,0px),var(--gaze-y,0px));transition:transform .14s ease-out}
 .pb-body,.pb-legs rect{fill:#d97757}
-.pb-eyes rect{fill:#1d1a18}
-.pb-zzz rect{fill:#fff}
-.pb-legs-b,.pb-legs-fold,.pb-eyes-closed,.pb-zzz,.pb-eyes-dizzy{display:none}
+.pb-eyes rect,.pb-eyes-dizzy rect,.pb-mouth rect{fill:#1d1a18}
+.pb-zzz rect,.pb-alert rect,.pb-star,.pb-dust rect{fill:#fff}
+.pb-legs-b,.pb-legs-fold,.pb-legs-tall,.pb-legs-crouch,.pb-eyes-blink,.pb-eyes-closed,.pb-zzz,.pb-eyes-dizzy,.pb-mouth,.pb-alert,.pb-stars{display:none}
 .pb-z{opacity:0}
 .z1{transform:translate(12.5px,4px) scale(.5)}
 .z2{transform:translate(14px,1px) scale(.75)}
-[data-tone=good] .pb-legs-b{display:inline;animation:pb-frame .5s steps(1) infinite}
-[data-tone=good] .pb-legs-a{animation:pb-frame .5s steps(1) infinite reverse}
-[data-tone=good] .pb-me{animation:pb-walk 3.2s steps(1) infinite}
-@keyframes pb-frame{0%{opacity:1}50%{opacity:0}}
-@keyframes pb-walk{0%{transform:translate(-2px,0)}12.5%{transform:translate(-1px,-1px)}25%{transform:translate(0,0)}37.5%{transform:translate(1px,-1px)}50%{transform:translate(2px,0)}62.5%{transform:translate(1px,-1px)}75%{transform:translate(0,0)}87.5%{transform:translate(-1px,-1px)}}
-[data-tone=warn] .pb-eyes-open{animation:pb-look 1.8s steps(1) infinite}
+
+/* 放行 = 巡逻：每步 2T，抬腿帧身体上浮 1px；来回两趟后在右端停 4 步、向外看再回看一眼（40T = 4.8s 一轮） */
+[data-tone=good] .pb-legs-b{display:inline;animation:pb-step-b 4.8s steps(1) infinite}
+[data-tone=good] .pb-legs-a{animation:pb-step-a 4.8s steps(1) infinite}
+[data-tone=good] .pb-me{animation:pb-walk 4.8s steps(1) infinite}
+[data-tone=good] .pb-eyes-open{animation:pb-walk-look 4.8s steps(1) infinite}
+[data-tone=good] .state-badge[data-tracking] .pb-eyes-open{animation:none}
+/* 确认中 = 原地张望：身体不动，只有眼睛——看左停住、回看右边、眨一下、瞟回左边（36T = 4.32s，不对称） */
+[data-tone=warn] .pb-eyes-open{animation:pb-look 4.32s steps(1) infinite}
 [data-tone=warn] .state-badge[data-tracking] .pb-eyes-open{animation:none}
-@keyframes pb-look{0%{transform:translateX(-1px)}50%{transform:translateX(1px)}}
+[data-tone=warn] .state-badge:not([data-tracking],[data-clawd-motion],[data-clawd-react],[data-clawd-busy]) .pb-eyes-blink{display:inline;animation:pb-look-blink 4.32s steps(1) infinite}
+/* 阻断 = 睡觉：趴低 1px、收腿、闭眼；呼气时上半身下沉 1px 压住收起的腿（身体变扁），两个 z 轮流（各亮 11T、错开 12T）沿向右鼓的弧线逐格升起，不会叠在一起（24T = 2.88s） */
+[data-tone=bad] .pb-me{transform:translateY(1px)}
 [data-tone=bad] .pb-legs-a,[data-tone=bad] .pb-eyes-open{display:none}
 [data-tone=bad] .pb-legs-fold,[data-tone=bad] .pb-eyes-closed,[data-tone=bad] .pb-zzz{display:inline}
-[data-tone=bad] .pb-me{transform:translateY(1px);animation:pb-breathe 2.4s steps(1) infinite}
-@keyframes pb-breathe{0%{transform:translateY(1px)}50%{transform:translateY(0)}}
-[data-tone=bad] .pb-z{animation:pb-float 2.4s linear infinite}
-[data-tone=bad] .z2{animation-delay:1.2s}
-@keyframes pb-float{0%{opacity:0;translate:0 2px}20%{opacity:1}80%{opacity:1}100%{opacity:0;translate:0 -2px}}
-[data-tone=idle] .pb-eyes-open{animation:pb-blink 4s steps(1) infinite}
-@keyframes pb-blink{0%{opacity:1}94%{opacity:0}97%{opacity:1}}
+[data-tone=bad] .pb-top{animation:pb-breathe 2.88s steps(1) infinite}
+[data-tone=bad] .pb-z{animation:pb-float 2.88s steps(1) infinite}
+[data-tone=bad] .z2{animation-delay:1.44s}
+/* 未配置 = 站着等：不走不看，guard.js 每 3–6s 随机眨一次眼（约 1/4 连眨两下） */
+[data-tone=idle] .state-badge[data-clawd-blink]:not([data-clawd-motion]) .pb-eyes-open{animation:pb-blink .12s steps(1) both}
+[data-tone=idle] .state-badge[data-clawd-blink="2"]:not([data-clawd-motion]) .pb-eyes-open{animation:pb-blink2 .36s steps(1) both}
+[data-tone=idle] .state-badge[data-clawd-blink]:not([data-clawd-motion],[data-clawd-react],[data-clawd-busy]) .pb-eyes-blink{display:inline;animation:pb-blink-lid .12s steps(1) both}
+[data-tone=idle] .state-badge[data-clawd-blink="2"]:not([data-clawd-motion],[data-clawd-react],[data-clawd-busy]) .pb-eyes-blink{animation:pb-blink2-lid .36s steps(1) both}
+@keyframes pb-walk{0%{transform:translate(-2px,0px)}5%{transform:translate(-1px,-1px)}10%{transform:none}15%{transform:translate(1px,-1px)}20%{transform:translate(2px,0px)}25%{transform:translate(1px,-1px)}30%{transform:none}35%{transform:translate(-1px,-1px)}40%{transform:translate(-2px,0px)}45%{transform:translate(-1px,-1px)}50%{transform:none}55%{transform:translate(1px,-1px)}60%{transform:translate(2px,0px)}85%{transform:translate(1px,-1px)}90%{transform:none}95%{transform:translate(-1px,-1px)}}
+@keyframes pb-step-a{0%{opacity:1}5%{opacity:0}10%{opacity:1}15%{opacity:0}20%{opacity:1}25%{opacity:0}30%{opacity:1}35%{opacity:0}40%{opacity:1}45%{opacity:0}50%{opacity:1}55%{opacity:0}60%{opacity:1}85%{opacity:0}90%{opacity:1}95%{opacity:0}}
+@keyframes pb-step-b{0%{opacity:0}5%{opacity:1}10%{opacity:0}15%{opacity:1}20%{opacity:0}25%{opacity:1}30%{opacity:0}35%{opacity:1}40%{opacity:0}45%{opacity:1}50%{opacity:0}55%{opacity:1}60%{opacity:0}85%{opacity:1}90%{opacity:0}95%{opacity:1}}
+@keyframes pb-walk-look{0%{transform:none}65%{transform:translateX(1px)}75%{transform:none}80%{transform:translateX(-1px)}85%{transform:none}}
+@keyframes pb-look{0%{transform:translateX(-1px);opacity:1}27.78%{transform:none;opacity:1}33.33%{transform:translateX(1px);opacity:1}55.56%{transform:translateX(1px);opacity:0}58.33%{transform:translateX(1px);opacity:1}69.44%{transform:none;opacity:1}80.56%{transform:translateX(-1px);opacity:1}86.11%{transform:none;opacity:1}}
+@keyframes pb-scan{0%{transform:translateX(-1px)}50%{transform:translateX(1px)}}
+@keyframes pb-breathe{0%{transform:none}45.83%{transform:translateY(1px)}}
+@keyframes pb-float{0%{opacity:0;translate:0 1px}4.17%{opacity:1;translate:0 1px}16.67%{translate:1px 0}29.17%{translate:1px -1px}41.67%{opacity:1;translate:0 -2px}50%,100%{opacity:0;translate:0 -2px}}
+@keyframes pb-blink{0%{opacity:0}100%{opacity:1}}
+@keyframes pb-blink2{0%{opacity:0}33.33%{opacity:1}66.67%{opacity:0}100%{opacity:1}}
+/* 眨眼帧：竖眼（1×2）换成下半格（1×1），比整只眼消失更像「闭了一下」，也不会和睡觉的横线闭眼混淆 */
+@keyframes pb-blink-lid{0%{opacity:1}100%{opacity:0}}
+@keyframes pb-blink2-lid{0%{opacity:1}33.33%{opacity:0}66.67%{opacity:1}100%{opacity:0}}
+@keyframes pb-look-blink{0%{opacity:0;transform:translateX(1px)}55.56%{opacity:1}58.33%,100%{opacity:0}}
+
+/* 互动（data-clawd-motion）：按住蓄力 = 逐级下蹲（每 1/3 蹲 1 格，满格前 1 格颤抖）→ 松开 = 整格弧线起跳 → 落地蹲 1 拍 + 扬尘；
+   蓄满 = 高跳 → 重落地 → 晕眩（叉眼、三颗星绕头、左右晃 1 格）。 */
 .state-badge[data-clawd-motion]{z-index:1}
 .state-badge[data-clawd-motion] .pb-me{animation:none;transform:none}
+.state-badge[data-clawd-motion] .pb-top{animation:none}
 .state-badge[data-clawd-motion] :is(.pb-legs-a,.pb-eyes-open){display:inline;animation:none}
 .state-badge[data-clawd-motion] :is(.pb-legs-b,.pb-legs-fold,.pb-eyes-closed,.pb-zzz),
 .state-badge[data-clawd-motion=dizzy] .pb-eyes-open{display:none}
-.state-badge[data-clawd-motion=dizzy] .pb-eyes-dizzy{display:inline;fill:none;stroke:#1d1a18;stroke-width:.65;shape-rendering:auto}
-@media (prefers-reduced-motion:reduce){.pixel-buddy *{animation:none!important}.pb-gaze{transform:none;transition:none}[data-tone=bad] .pb-z{opacity:1}}
+.state-badge[data-clawd-motion][data-clawd-crouch] .pb-legs-a{display:none}
+.state-badge[data-clawd-motion][data-clawd-crouch="1"] .pb-legs-crouch{display:inline}
+.state-badge[data-clawd-motion][data-clawd-crouch="1"] .pb-top{transform:translateY(1px)}
+.state-badge[data-clawd-motion][data-clawd-crouch="2"] .pb-top{transform:translateY(2px)}
+.state-badge[data-clawd-motion=dizzy] :is(.pb-eyes-dizzy,.pb-stars){display:inline}
+.state-badge[data-clawd-motion=dizzy] .pb-me{animation:pb-sway .48s steps(1) infinite}
+.state-badge[data-clawd-motion=dizzy] .pb-star{animation:pb-orbit .72s steps(1) infinite}
+.state-badge[data-clawd-motion=dizzy] .s2{animation-delay:-.24s}
+.state-badge[data-clawd-motion=dizzy] .s3{animation-delay:-.48s}
+@keyframes pb-sway{0%{transform:translateX(-1px)}25%{transform:none}50%{transform:translateX(1px)}75%{transform:none}}
+@keyframes pb-orbit{0%{transform:none}16.67%{transform:translate(1px,-1px)}33.33%{transform:translate(5px,-1px)}50%{transform:translate(6px,0)}66.67%{transform:translate(5px,1px)}83.33%{transform:translate(1px,1px)}}
+/* 扬尘：独立的地面层，不随起跳位移；脚两侧各一粒，3T 内向外上方飘 2 格后消失 */
+.state-badge>svg{grid-area:1/1}
+.pb-ground{width:62px;height:48px;display:block;overflow:visible;pointer-events:none}
+.pb-dust{display:none;translate:0 -1.5px}
+:root:not([data-theme=dark]) .pb-dust{translate:.5px -1.5px}
+.state-badge[data-clawd-dust] .pb-dust{display:inline}
+.state-badge[data-clawd-dust] .pb-dust-l{animation:pb-dust-l .36s steps(1) both}
+.state-badge[data-clawd-dust] .pb-dust-r{animation:pb-dust-r .36s steps(1) both}
+@keyframes pb-dust-l{0%{opacity:1;transform:none}33.33%{opacity:1;transform:translate(-1px,-1px)}66.67%{opacity:1;transform:translate(-2px,-1px)}100%{opacity:0;transform:translate(-2px,-1px)}}
+@keyframes pb-dust-r{0%{opacity:1;transform:none}33.33%{opacity:1;transform:translate(1px,-1px)}66.67%{opacity:1;transform:translate(2px,-1px)}100%{opacity:0;transform:translate(2px,-1px)}}
+
+/* 状态反应（data-clawd-react，一次性，guard.js 根据 data-tone / 「连续确认」计数 / 指针 / 空闲时间设置） */
+@media (prefers-reduced-motion:no-preference){
+  /* 醒来（阻断 → 放行 / 确认中，7T）：大 Z 上弹 1 格后消失 → 睁眼 → 眨一下 → 伸懒腰（身体抬 1 格、腿拉长、钳子抬 1 格）→ 站好 */
+  .state-badge[data-clawd-react=wake]:not([data-clawd-motion]) :is(.pb-legs-fold,.pb-legs-a,.pb-legs-tall,.pb-eyes-open,.pb-eyes-closed,.pb-zzz){display:inline}
+  .state-badge[data-clawd-react=wake]:not([data-clawd-motion]) .pb-legs-b{display:none}
+  .state-badge[data-clawd-react=wake]:not([data-clawd-motion]) .pb-me{animation:pbw-me .84s steps(1) both}
+  .state-badge[data-clawd-react=wake]:not([data-clawd-motion]) .z2{animation:pbw-z .84s steps(1) both}
+  .state-badge[data-clawd-react=wake]:not([data-clawd-motion]) .z1{animation:none;opacity:0}
+  .state-badge[data-clawd-react=wake]:not([data-clawd-motion]) .pb-legs-fold{animation:pb-on-0-57 .84s steps(1) both}
+  .state-badge[data-clawd-react=wake]:not([data-clawd-motion]) .pb-legs-tall{animation:pb-on-57-71 .84s steps(1) both}
+  .state-badge[data-clawd-react=wake]:not([data-clawd-motion]) .pb-legs-a{animation:pb-on-71-100 .84s steps(1) both}
+  .state-badge[data-clawd-react=wake]:not([data-clawd-motion]) .pb-eyes-closed{animation:pbw-shut .84s steps(1) both}
+  .state-badge[data-clawd-react=wake]:not([data-clawd-motion]) .pb-eyes-open{animation:pbw-open .84s steps(1) both}
+  .state-badge[data-clawd-react=wake]:not([data-clawd-motion]) .pb-claw{animation:pbw-claw .84s steps(1) both}
+  @keyframes pbw-me{0%{transform:translateY(1px)}57.14%{transform:translateY(-1px)}71.43%,100%{transform:none}}
+  @keyframes pbw-z{0%{opacity:1;translate:0 0}14.29%{opacity:1;translate:0 -1px}28.57%,100%{opacity:0;translate:0 -1px}}
+  @keyframes pbw-shut{0%{opacity:1}14.29%{opacity:0}42.86%{opacity:1}57.14%,100%{opacity:0}}
+  @keyframes pbw-open{0%{opacity:0}14.29%{opacity:1}42.86%{opacity:0}57.14%,100%{opacity:1}}
+  @keyframes pbw-claw{0%{transform:none}57.14%{transform:translateY(-1px)}71.43%,100%{transform:none}}
+  /* 受惊再睡（放行 → 阻断，6T）：跳 1 格 + 头顶「!」→ 落地愣 2 拍 → 收腿闭眼 → 沉进睡姿 */
+  .state-badge[data-clawd-react=startle]:not([data-clawd-motion]) :is(.pb-legs-a,.pb-legs-fold,.pb-eyes-open,.pb-eyes-closed,.pb-alert){display:inline}
+  .state-badge[data-clawd-react=startle]:not([data-clawd-motion]) .pb-zzz{display:none}
+  .state-badge[data-clawd-react=startle]:not([data-clawd-motion]) .pb-me{animation:pbs-me .72s steps(1) both}
+  .state-badge[data-clawd-react=startle]:not([data-clawd-motion]) .pb-top{animation:none}
+  .state-badge[data-clawd-react=startle]:not([data-clawd-motion]) :is(.pb-legs-a,.pb-eyes-open,.pb-alert){animation:pb-on-0-50 .72s steps(1) both}
+  .state-badge[data-clawd-react=startle]:not([data-clawd-motion]) :is(.pb-legs-fold,.pb-eyes-closed){animation:pb-on-50-100 .72s steps(1) both}
+  @keyframes pbs-me{0%{transform:translateY(-1px)}16.67%{transform:none}66.67%,100%{transform:translateY(1px)}}
+  /* 点头（连续确认 1/3、2/3，3T）：眼睛低 1 格两拍 */
+  .state-badge[data-clawd-react=nod]:not([data-clawd-motion]) .pb-eyes-open{animation:pbn-eyes .36s steps(1) both}
+  @keyframes pbn-eyes{0%{transform:translateY(1px)}66.67%,100%{transform:none}}
+  /* 欢呼（确认中 → 已放行，7T）：双钳举起（上 2 格、外 1 格）、眯眼笑、两次 2 格小跳 */
+  .state-badge[data-clawd-react=cheer]:not([data-clawd-motion]) :is(.pb-legs-a,.pb-eyes-open,.pb-eyes-closed){display:inline}
+  .state-badge[data-clawd-react=cheer]:not([data-clawd-motion]) .pb-legs-b{display:none}
+  .state-badge[data-clawd-react=cheer]:not([data-clawd-motion]) .pb-legs-a{animation:none;opacity:1}
+  .state-badge[data-clawd-react=cheer]:not([data-clawd-motion]) .pb-me{animation:pbc-me .84s steps(1) both}
+  .state-badge[data-clawd-react=cheer]:not([data-clawd-motion]) .pb-claw-l{animation:pbc-claw-l .84s steps(1) both}
+  .state-badge[data-clawd-react=cheer]:not([data-clawd-motion]) .pb-claw-r{animation:pbc-claw-r .84s steps(1) both}
+  .state-badge[data-clawd-react=cheer]:not([data-clawd-motion]) .pb-eyes-closed{animation:pb-on-0-86 .84s steps(1) both}
+  .state-badge[data-clawd-react=cheer]:not([data-clawd-motion]) .pb-eyes-open{animation:pb-off-0-86 .84s steps(1) both}
+  @keyframes pbc-me{0%{transform:translateY(-1px)}14.29%{transform:translateY(-2px)}28.57%{transform:none}42.86%{transform:translateY(-1px)}57.14%{transform:translateY(-2px)}71.43%,100%{transform:none}}
+  @keyframes pbc-claw-l{0%{transform:translate(-1px,-2px)}85.71%,100%{transform:none}}
+  @keyframes pbc-claw-r{0%{transform:translate(1px,-2px)}85.71%,100%{transform:none}}
+  /* 招手（指针移入，6T）：右钳抬起，内外摆两次 */
+  .state-badge[data-clawd-react=wave]:not([data-clawd-motion]) .pb-claw-r{animation:pbv-claw .72s steps(1) both}
+  @keyframes pbv-claw{0%{transform:translateY(-1px)}16.67%{transform:translateY(-2px)}33.33%{transform:translate(1px,-2px)}50%{transform:translateY(-2px)}66.67%{transform:translate(1px,-2px)}83.33%{transform:translateY(-1px)}100%{transform:none}}
+  /* 哈欠（放行时 45s 无操作，每段空闲一次，8T）：停步、闭眼、嘴张开两帧 */
+  .state-badge[data-clawd-react=yawn]:not([data-clawd-motion]) :is(.pb-eyes-open,.pb-eyes-closed,.pb-mouth){display:inline}
+  .state-badge[data-clawd-react=yawn]:not([data-clawd-motion]) .pb-legs-b{display:none}
+  .state-badge[data-clawd-react=yawn]:not([data-clawd-motion]) .pb-legs-a{animation:none;opacity:1}
+  .state-badge[data-clawd-react=yawn]:not([data-clawd-motion]) .pb-me{animation:none;transform:none}
+  .state-badge[data-clawd-react=yawn]:not([data-clawd-motion]) .pb-eyes-open{animation:pb-off-0-88 .96s steps(1) both}
+  .state-badge[data-clawd-react=yawn]:not([data-clawd-motion]) .pb-eyes-closed{animation:pb-on-0-88 .96s steps(1) both}
+  .state-badge[data-clawd-react=yawn]:not([data-clawd-motion]) .pb-mouth-s{animation:pby-s .96s steps(1) both}
+  .state-badge[data-clawd-react=yawn]:not([data-clawd-motion]) .pb-mouth-o{animation:pb-on-13-75 .96s steps(1) both}
+  @keyframes pby-s{0%{opacity:1}12.5%{opacity:0}75%{opacity:1}87.5%,100%{opacity:0}}
+  /* 帧开关：pb-on-A-B = 只在 A%–B% 显示，pb-off-A-B 相反 */
+  @keyframes pb-on-0-50{0%{opacity:1}50%,100%{opacity:0}}
+  @keyframes pb-on-50-100{0%{opacity:0}50%,100%{opacity:1}}
+  @keyframes pb-on-0-57{0%{opacity:1}57.14%,100%{opacity:0}}
+  @keyframes pb-on-57-71{0%{opacity:0}57.14%{opacity:1}71.43%,100%{opacity:0}}
+  @keyframes pb-on-71-100{0%{opacity:0}71.43%,100%{opacity:1}}
+  @keyframes pb-on-0-86{0%{opacity:1}85.71%,100%{opacity:0}}
+  @keyframes pb-off-0-86{0%{opacity:0}85.71%,100%{opacity:1}}
+  @keyframes pb-on-0-88{0%{opacity:1}87.5%,100%{opacity:0}}
+  @keyframes pb-off-0-88{0%{opacity:0}87.5%,100%{opacity:1}}
+  @keyframes pb-on-13-75{0%{opacity:0}12.5%{opacity:1}75%,100%{opacity:0}}
+  /* 检测中（重新检测 / 重新验证 / 环境检查）：眼睛 4T 一次快速左右扫；阻断时睁眼偷看 */
+  .state-badge[data-clawd-busy]:not([data-clawd-motion],[data-clawd-react],[data-tracking]) .pb-eyes-open{display:inline;animation:pb-scan .48s steps(1) infinite}
+  #guard-summary[data-tone=bad] .state-badge[data-clawd-busy]:not([data-clawd-motion],[data-clawd-react],[data-tracking]) :is(.pb-eyes-closed,.pb-zzz){display:none}
+}
+@keyframes pb-cue{0%{opacity:.55}50%,100%{opacity:1}}
+/* 减少动态效果：所有精灵动画停在各状态的静帧（四种状态仍靠姿势 + 底色区分），状态反应只留一次 3T 的透明度提示 */
+@media (prefers-reduced-motion:reduce){.pixel-buddy *,.pb-ground *{animation:none!important}.pb-gaze{transform:none;transition:none}[data-tone=bad] .pb-z{opacity:1}.state-badge[data-clawd-react]:not([data-clawd-motion]) .pixel-buddy{animation:pb-cue .36s steps(1) both}}
 
 /* 保护进度 */
 .steps-card{border-left:1px dashed var(--line-strong);padding:2px 0 2px 22px;display:flex;flex-direction:column;justify-content:center}
@@ -185,6 +367,8 @@ h2{font-size:13px;font-weight:600;color:var(--ink)}
 .step.active::before{background:var(--ink);box-shadow:0 0 0 4px rgba(22,26,33,.08)}
 .step.waiting::before,.step.paused::before{background:var(--warn)}
 .step.error::before{background:var(--bad);box-shadow:0 0 0 4px rgba(229,72,77,.14)}
+.step-state,.check-state,.env-state{transition:background-color var(--t) var(--ease),color var(--t) var(--ease),box-shadow var(--t) var(--ease)}
+.step::before{transition:background-color var(--t) var(--ease),box-shadow var(--t) var(--ease)}
 .step-state{font-size:10.5px;font-weight:600;height:20px;min-width:48px;padding:0 9px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;flex:none;white-space:nowrap}
 .step.todo .step-state,.step.blocked .step-state{background:var(--chip);color:var(--muted)}
 .step.done .step-state{background:var(--good-tint);color:var(--good-ink)}
@@ -214,9 +398,12 @@ h2{font-size:13px;font-weight:600;color:var(--ink)}
 .check.bad .check-state{background:var(--bad);color:#fff}
 .tools-card{display:flex;flex-direction:column;padding-bottom:12px}
 .tool-list{display:flex;flex-direction:column;justify-content:space-between;gap:2px;margin:0 -12px;flex:1}
-.tool{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:10px 12px;border-radius:12px;width:100%;position:relative}
-.tool::after{content:"›";position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:16px}
-.tool:hover:not(:disabled){background:rgba(255,255,255,.9)}
+.tool{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:10px 12px;border-radius:14px;width:100%;position:relative;
+  transition:background-color var(--t) var(--ease),box-shadow var(--t) var(--ease),transform var(--t-fast) var(--ease)}
+.tool::after{content:"›";position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:16px;transition:color var(--t) var(--ease),right var(--t) var(--ease)}
+.tool:hover:not(:disabled){background:var(--surface);box-shadow:var(--lift-soft)}
+.tool:hover:not(:disabled)::after{color:var(--muted);right:10px}
+.tool:active:not(:disabled){transform:scale(.99);box-shadow:none}
 .tool strong{font-size:13px;font-weight:600;color:var(--ink)}
 .check-action.is-busy{opacity:.85;cursor:progress}
 .pill-button.check-action.is-busy > .btn-icon{display:none}
@@ -260,6 +447,10 @@ h2{font-size:13px;font-weight:600;color:var(--ink)}
 .log-row>:last-child{text-align:right}
 .log-row time{color:var(--muted);font-variant-numeric:tabular-nums}
 .log-head{min-height:0;padding:12px 0 8px;font-size:11px;font-weight:500;color:var(--muted)}
+/* 列表行悬停：行后铺一条圆角浅色带，左右各外扩 12px，文字列不动 */
+.connection-list .log-row,.env-rows .env-row,.env-history .env-record{position:relative;isolation:isolate}
+.connection-list .log-row::before,.env-rows .env-row::before,.env-history .env-record::before{content:"";position:absolute;z-index:-1;inset:3px -12px;border-radius:12px;background:var(--row-band);opacity:0;transition:opacity var(--t) var(--ease)}
+.connection-list .log-row:hover::before,.env-rows .env-row:hover::before,.env-history .env-record:hover::before{opacity:1}
 
 /* ---------- 设置 ---------- */
 .setting-card{padding:4px 24px}
@@ -271,10 +462,11 @@ h2{font-size:13px;font-weight:600;color:var(--ink)}
 kbd{font:inherit;font-size:12px;font-weight:600;color:var(--ink);background:#fff;border:1px solid var(--line-strong);border-radius:8px;padding:4px 10px;white-space:nowrap}
 
 /* ---------- 配置三步 ---------- */
-.stepper{list-style:none;margin:0;padding:4px;display:inline-flex;gap:4px;border-radius:99px;background:#fff;border:1px solid var(--line);align-self:flex-start}
+.stepper{position:relative;list-style:none;margin:0;padding:4px;display:inline-flex;gap:4px;border-radius:99px;background:#fff;border:1px solid var(--line);align-self:flex-start}
 .stepper li{display:flex;align-items:center;gap:8px;height:32px;padding:0 16px 0 6px;border-radius:99px;font-size:12.5px;font-weight:500;color:var(--muted)}
-.stepper li span{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:600;background:rgba(22,26,33,.07);color:var(--muted)}
-.stepper li.active{background:var(--ink);color:#fff;font-weight:600}.stepper li.active span{background:#fff;color:var(--ink)}
+.stepper li{transition:color var(--t) var(--ease)}
+.stepper li span{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:600;background:rgba(22,26,33,.07);color:var(--muted);transition:background-color var(--t-slow) var(--ease),color var(--t-slow) var(--ease)}
+.stepper li.active{background:var(--thumb-ink);color:var(--on-ink);font-weight:600}.stepper li.active span{background:var(--on-ink);color:var(--ink)}
 .stepper li.done{color:var(--ink)}.stepper li.done span{background:var(--good);color:#fff}
 .stepper li em{font-style:normal}
 #setup-form{flex:1 0 auto;display:flex;flex-direction:column}
@@ -298,16 +490,18 @@ legend+*{clear:both}
 .detect-text strong{font-weight:600;font-size:13.5px;color:var(--ink)}
 .detect-text small{line-height:1.55}
 .help-trigger{position:relative;isolation:isolate;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;color:var(--muted);font-size:10px;font-weight:600;line-height:1}
-.help-trigger::before{content:"";position:absolute;z-index:-1;inset:2px;border-radius:inherit;background:var(--chip)}
+.help-trigger{transition:color var(--t) var(--ease)}
+.help-trigger::before{content:"";position:absolute;z-index:-1;inset:2px;border-radius:inherit;background:var(--chip);transition:background-color var(--t) var(--ease),inset var(--t) var(--ease)}
 .help-trigger:hover,.help-trigger[aria-expanded=true]{color:var(--ink)}
+.help-trigger:hover::before,.help-trigger[aria-expanded=true]::before{inset:0;background:rgba(22,26,33,.09)}
 .help-tip{position:absolute;z-index:2;top:calc(100% + 4px);left:0;display:grid;gap:6px;width:max-content;max-width:min(100%,310px);
-  padding:10px 12px;background:#fff;border:1px solid var(--line-strong);border-radius:12px;box-shadow:var(--shadow);font-size:12px;line-height:1.5}
+  padding:12px 14px;background:var(--surface);border:1px solid var(--hairline);border-radius:14px;box-shadow:var(--lift);font-size:12px;line-height:1.5}
 .help-tip::before{content:"";position:absolute;inset:-5px 0 auto;height:5px}
 .help-tip[data-placement=above]{top:auto;bottom:calc(100% + 4px)}
 .help-tip[data-placement=above]::before{inset:auto 0 -5px}
 .help-instructions{display:grid;gap:4px}
 #secret-help-clash img{display:block;width:auto;height:auto;max-width:100%;max-height:30vh;justify-self:start;border-radius:6px}
-:root[data-theme=dark] .help-tip{background:var(--glass)}
+:root[data-theme=dark] .help-tip{background:var(--raised);border-color:var(--surface-line)}
 .detect-box[data-status=checking] .detect-dot{animation:detect-pulse 1s ease-in-out infinite alternate}
 .detect-box[data-status=found] .detect-dot{background:var(--good);box-shadow:0 0 0 4px rgba(47,181,124,.16)}
 .detect-box[data-status=disabled] .detect-dot,.detect-box[data-status=needs-secret] .detect-dot{background:var(--warn);box-shadow:0 0 0 4px rgba(240,164,58,.18)}
@@ -316,39 +510,54 @@ legend+*{clear:both}
 .segmented{display:grid;grid-template-columns:1fr 1fr;gap:var(--container-gap)}
 .segmented label{display:block;cursor:pointer}
 .segmented input{position:absolute;opacity:0;pointer-events:none;width:1px}
-.segmented span{display:flex;flex-direction:column;gap:4px;height:100%;padding:14px 44px 14px 16px;border-radius:16px;background:rgba(255,255,255,.6);border:1px solid var(--line);position:relative;transition:background .15s,border-color .15s,box-shadow .15s}
+/* 单选卡：选中 = 抬起（白底 + 分层阴影 + 发丝线），右上角 18px 墨色圆点内描出对勾 */
+.segmented span{display:flex;flex-direction:column;gap:4px;height:100%;padding:14px 46px 14px 16px;border-radius:20px;background:var(--card-rest);border:1px solid var(--line);position:relative;
+  transition:background-color var(--t) var(--ease),border-color var(--t) var(--ease),box-shadow var(--t) var(--ease)}
 .segmented strong{font-weight:600;font-size:13.5px;color:var(--ink)}
 .segmented small{line-height:1.5}
-.segmented label:hover span{background:rgba(255,255,255,.88)}
-.segmented input:checked+span{background:#fff;border-color:var(--ink);box-shadow:var(--ring)}
-.segmented input:focus-visible+span{box-shadow:var(--ring-focus)}
-.segmented span::after{content:"";position:absolute;top:15px;right:16px;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line-strong)}
-.segmented input:checked+span::after{border:5px solid var(--ink)}
+.segmented label:hover input:not(:checked)+span{background:var(--card-hover);box-shadow:var(--lift-soft)}
+.segmented input:checked+span{background:var(--surface);border-color:var(--hairline);box-shadow:var(--lift)}
+.segmented input:focus-visible+span{box-shadow:var(--lift),0 0 0 2px var(--focus-gap),0 0 0 4px var(--focus-halo)}
+.segmented span::after{content:"";position:absolute;top:16px;right:16px;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--box-line);
+  transition:background-color var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease)}
+.segmented label:hover input:not(:checked)+span::after{border-color:var(--box-line-hover)}
+.segmented span::before{content:"";position:absolute;z-index:1;top:16px;right:16px;width:16px;height:16px;background:var(--on-ink);
+  -webkit-mask:var(--check) center/10px 10px no-repeat;mask:var(--check) center/10px 10px no-repeat;clip-path:inset(0 100% 0 0);transition:clip-path var(--t) var(--ease)}
+.segmented input:checked+span::after{background:var(--ink);border-color:var(--ink)}
+.segmented input:checked+span::before{clip-path:inset(0)}
 .relay-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--container-gap)}
-.node-picker{display:flex;flex:1;flex-direction:column;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.55);overflow:hidden}
-.node-select-all{display:flex;flex:none;align-items:center;gap:10px;min-height:36px;padding:0 14px;border-bottom:1px solid var(--line);color:var(--ink);font-weight:500;cursor:pointer}
+/* 节点多选：行铺满列表宽度，与「全选」同一左内边距 14px；选中行 = 白色抬起底，无描边；
+   连续选中的行合成一条白带，行间只留发丝线。键盘焦点画在行上，复选框本身不加光圈。 */
+.node-picker{display:flex;flex:1;flex-direction:column;border:1px solid var(--line);border-radius:18px;background:var(--picker-bg);overflow:hidden}
+.node-select-all{display:flex;flex:none;align-items:center;gap:10px;min-height:40px;padding:0 14px;border-bottom:1px solid var(--line);color:var(--ink);font-weight:500;cursor:pointer;
+  transition:background-color var(--t) var(--ease)}
+.node-select-all:hover:not(:has(:disabled)){background:var(--row-hover)}
 .node-select-all:has(:disabled){color:var(--muted);cursor:default}
-.node-select-all input:indeterminate{background:var(--ink);border-color:var(--ink)}
-.node-select-all input:indeterminate::after{content:"";width:8px;height:2px;background:var(--on-ink,#fff);border:0;transform:none}
-.node-list{display:flex;flex:1;flex-direction:column;min-height:114px;contain:size;overflow:auto;padding:4px;scrollbar-width:thin}
-.node-list .empty{padding:14px 12px}
-.node-option{display:flex;align-items:center;gap:10px;min-height:38px;padding:0 10px;border-radius:10px;cursor:pointer;font-size:12.5px}
-.node-option:hover{background:rgba(255,255,255,.9)}
-.node-option:has(input:checked){background:#fff;box-shadow:inset 0 0 0 1px var(--ink)}
-.node-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.node-list{display:flex;flex:1;flex-direction:column;min-height:114px;contain:size;overflow:auto;padding:0;scrollbar-width:thin}
+.node-list .empty{padding:14px}
+.node-option{position:relative;display:flex;align-items:center;gap:10px;min-height:38px;padding:0 14px;cursor:pointer;font-size:12.5px;
+  transition:background-color var(--t) var(--ease),box-shadow var(--t) var(--ease)}
+.node-option:hover{background:var(--row-hover)}
+.node-option:has(input:checked){background:var(--row-selected);box-shadow:inset 0 1px 0 var(--hairline),inset 0 -1px 0 var(--hairline)}
+.node-option:has(input:focus-visible),.node-select-all:has(input:focus-visible){box-shadow:inset 0 0 0 2px var(--focus-halo)}
+:is(.node-option,.node-select-all) input:focus-visible{box-shadow:none}
+.node-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);transition:color var(--t) var(--ease)}
+.node-option:has(input:checked) .node-name{color:var(--ink);font-weight:500}
 .node-type{font-size:11px;color:var(--faint)}
 .relay-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--container-gap)}
 .relay-grid label.wide{grid-column:span 3}
 .relay-grid label:nth-child(3),.relay-grid label:nth-child(4){grid-column:span 2}
-.seg-mini{display:flex;gap:2px;padding:3px;border-radius:99px;background:var(--chip)}
-.seg-mini button{height:28px;padding:0 14px;border-radius:99px;font-size:12px;font-weight:500;color:var(--muted)}
+.seg-mini{position:relative;display:flex;gap:2px;padding:3px;border-radius:99px;background:var(--chip)}
+.seg-mini button{height:28px;padding:0 14px;border-radius:99px;font-size:12px;font-weight:500;color:var(--muted);transition:color var(--t) var(--ease),background-color var(--t) var(--ease)}
 .seg-mini button:hover:not(.active){color:var(--ink)}
-.seg-mini button.active{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(20,24,30,.08)}
+.seg-mini button.active{background:var(--seg-thumb);color:var(--seg-ink,var(--ink));font-weight:600;box-shadow:var(--seg-thumb-shadow)}
+.seg-mini.has-thumb::before{background:var(--seg-thumb);box-shadow:var(--seg-thumb-shadow)}
 .switch-list{display:flex;flex-direction:column;border-top:1px solid var(--line)}
 .switch-list .switch-row{padding:14px 0}
 .switch-list .switch-row:last-child{border-bottom:1px solid var(--line)}
 details{margin:0}
-summary{font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;padding:2px 0;list-style:none;width:max-content}
+summary{font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;padding:2px 0;list-style:none;width:max-content;border-radius:6px;transition:color var(--t) var(--ease)}
+summary:hover{color:var(--ink)}
 summary::-webkit-details-marker{display:none}
 summary::before{content:"＋ "}details[open] summary::before{content:"－ "}
 details[open]>summary{margin-bottom:var(--group)}
@@ -403,8 +612,9 @@ details .hint{margin-top:10px}
 .env-history .empty{padding:18px 0}
 
 /* ---------- 浮层 ---------- */
-#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);max-width:80vw;background:var(--ink);color:#fff;padding:10px 18px;border-radius:99px;font-size:12px;box-shadow:0 10px 30px rgba(0,0,0,.2);z-index:20;text-align:center}
-dialog{border:1px solid #fff;border-radius:22px;background:rgba(250,250,251,.98);color:var(--text);padding:22px;box-shadow:0 20px 60px rgba(20,24,30,.22)}
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);max-width:80vw;background:var(--ink);color:var(--on-ink);padding:10px 18px;border-radius:99px;font-size:12px;
+  box-shadow:0 2px 6px rgba(10,12,16,.10),0 16px 34px -14px rgba(10,12,16,.40);z-index:20;text-align:center}
+dialog{border:1px solid #fff;border-radius:24px;background:rgba(250,250,251,.98);color:var(--text);padding:22px;box-shadow:0 2px 6px rgba(20,24,30,.05),0 24px 60px -20px rgba(20,24,30,.30)}
 dialog::backdrop{background:rgba(236,238,241,.6);backdrop-filter:blur(4px)}
 dialog h2{font-size:19px;font-weight:600;letter-spacing:-.02em;margin-bottom:8px}
 dialog.env-dialog{width:600px;max-width:calc(100vw - 48px);padding:26px 28px 22px}
@@ -442,7 +652,7 @@ dialog.guard-help{width:420px;max-width:calc(100vw - 48px);padding:22px 24px}
    深色模式 · <html data-theme="dark">
    参照 macOS 版深色面板：近黑底；渐变卡片收成深色卡 #1B1C21，渐变以约 30% 铺在上面，
    1px 同色描边约 28%，圆环约 7% 白；白色卡片改为 #141519 圆角卡 + 1px 7% 白描边。
-   选中 / 聚焦：抬高一档的深灰底 + 1px 近白描边 + 3px 10% 白光圈（对应浅色的白底 + 墨色描边）。
+   选中 / 聚焦：抬高一档的深灰底 + 发丝线 + 深色分层阴影（对应浅色的白色抬起），聚焦为 4px 6% 白柔光圈。
    只覆盖颜色，所有尺寸、间距（--sec 28px 等）与浅色完全一致。
    ===================================================================== */
 :root[data-theme=dark]{
@@ -461,6 +671,20 @@ dialog.guard-help{width:420px;max-width:calc(100vw - 48px);padding:22px 24px}
   --ring:0 0 0 3px rgba(255,255,255,.10);--ring-focus:0 0 0 3px rgba(255,255,255,.22);
   --shadow:none;
   --raised:#1f2026;--hover:rgba(255,255,255,.05);--on-ink:#0b0c0f;--surface-line:rgba(255,255,255,.07);
+  --ring:0 0 0 4px rgba(255,255,255,.07);
+  --lift:inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.35),0 14px 28px -16px rgba(0,0,0,.75);
+  --lift-soft:inset 0 1px 0 rgba(255,255,255,.04),0 10px 20px -14px rgba(0,0,0,.7);
+  --btn-shadow:none;--ink-shadow:0 1px 2px rgba(0,0,0,.4),0 8px 18px -10px rgba(0,0,0,.6);--ink-shadow-hover:0 1px 2px rgba(0,0,0,.4),0 12px 24px -12px rgba(0,0,0,.7);--ink-shadow-press:none;
+  --hairline:rgba(255,255,255,.06);--surface:#22232a;
+  --field-hover:rgba(255,255,255,.065);--focus-line:rgba(255,255,255,.32);--placeholder-focus:rgba(255,255,255,.22);
+  --box-line:rgba(255,255,255,.24);--box-line-hover:rgba(255,255,255,.42);
+  --picker-bg:rgba(255,255,255,.02);--row-hover:rgba(255,255,255,.035);--row-selected:rgba(255,255,255,.075);
+  --card-rest:rgba(255,255,255,.03);--card-hover:rgba(255,255,255,.05);
+  --focus-gap:#0b0c0f;--focus-halo:rgba(255,255,255,.34);
+  --thumb-ink:rgba(255,255,255,.94);--seg-thumb:rgba(255,255,255,.94);--seg-ink:#000;--seg-thumb-shadow:none;
+  --track:rgba(255,255,255,.16);--track-hover:rgba(255,255,255,.22);
+  --bad-line:rgba(255,90,82,.50);--bad-field:rgba(255,90,82,.06);--bad-ring:0 0 0 4px rgba(255,90,82,.14);
+  --row-band:rgba(255,255,255,.035);
 }
 :root[data-theme=dark] body{background:#0b0c0f}
 :root[data-theme=dark] ::placeholder{color:rgba(255,255,255,.30)}
@@ -477,35 +701,34 @@ dialog.guard-help{width:420px;max-width:calc(100vw - 48px);padding:22px 24px}
 :root[data-theme=dark] .node-list,:root[data-theme=dark] .env-plan{scrollbar-color:rgba(255,255,255,.16) transparent}
 :root[data-theme=dark] .pills{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.10);box-shadow:none}
 :root[data-theme=dark] .pills button:hover:not(.active){background:rgba(255,255,255,.06)}
-:root[data-theme=dark] .pills button.active{background:rgba(255,255,255,.94);color:#000}
+:root[data-theme=dark] .pills button.active{color:#000}
 
 /* 卡片 */
 :root[data-theme=dark] .card,:root[data-theme=dark] fieldset{background:var(--glass);border-color:var(--surface-line);box-shadow:none;backdrop-filter:none}
 
-/* 控件 */
-:root[data-theme=dark] input,:root[data-theme=dark] select{border-color:rgba(255,255,255,.10)}
-:root[data-theme=dark] input:hover,:root[data-theme=dark] select:hover{border-color:rgba(255,255,255,.18)}
-:root[data-theme=dark] input:focus,:root[data-theme=dark] select:focus{background-color:var(--raised);border-color:rgba(255,255,255,.85);box-shadow:var(--ring)}
+/* 控件：状态逻辑与浅色共用，这里只补深色专有的颜色 */
+:root[data-theme=dark] :is(input:not([type=checkbox],[type=radio]),select){border-color:rgba(255,255,255,.10)}
+:root[data-theme=dark] :is(input:not([type=checkbox],[type=radio]),select):hover:not(:disabled,:focus){border-color:rgba(255,255,255,.18)}
+:root[data-theme=dark] :is(input:not([type=checkbox],[type=radio]),select):focus{border-color:var(--focus-line)}
+:root[data-theme=dark] :is(input:not([type=checkbox],[type=radio]),select):is(:user-invalid,[aria-invalid=true]){border-color:var(--bad-line)}
 :root[data-theme=dark] select option{background:#1b1c21;color:#f2f3f5}
-:root[data-theme=dark] input[type=checkbox]{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.24)}
-:root[data-theme=dark] input[type=checkbox]:checked{background:var(--ink);border-color:var(--ink)}
-:root[data-theme=dark] input[type=checkbox]:checked::after{border-color:var(--on-ink)}
-:root[data-theme=dark] input[role=switch]{background:rgba(255,255,255,.16);border:0}
+:root[data-theme=dark] input[type=checkbox]:not([role=switch]){background:rgba(255,255,255,.04)}
+:root[data-theme=dark] input[type=checkbox]:not([role=switch]):is(:checked,:indeterminate){background:var(--ink)}
 :root[data-theme=dark] input[role=switch]::after{background:#f2f3f5;box-shadow:0 1px 3px rgba(0,0,0,.45)}
-:root[data-theme=dark] input[role=switch]:checked{background:var(--ink)}
 :root[data-theme=dark] input[role=switch]:checked::after{background:#16171b;box-shadow:none}
+:root[data-theme=dark] .help-trigger:hover::before,:root[data-theme=dark] .help-trigger[aria-expanded=true]::before{background:rgba(255,255,255,.12)}
 
 /* 按钮 */
 :root[data-theme=dark] .pill-button{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.92)}
-:root[data-theme=dark] .pill-button:hover:not(:disabled){background:rgba(255,255,255,.11);border-color:rgba(255,255,255,.20)}
+:root[data-theme=dark] .pill-button:hover:not(:disabled){background:rgba(255,255,255,.11);border-color:rgba(255,255,255,.20);box-shadow:var(--lift-soft)}
 :root[data-theme=dark] .pill-button.primary{background:rgba(255,255,255,.94);border-color:transparent;color:#000}
-:root[data-theme=dark] .pill-button.primary:hover:not(:disabled){background:#fff}
+:root[data-theme=dark] .pill-button.primary:hover:not(:disabled){background:#fff;box-shadow:var(--ink-shadow-hover)}
+:root[data-theme=dark] .pill-button.primary:active:not(:disabled){box-shadow:none}
 :root[data-theme=dark] .hero-actions .pill-button.primary.quiet{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.14);color:rgba(255,255,255,.94);box-shadow:none}
 :root[data-theme=dark] .hero-actions .pill-button.primary.quiet:hover:not(:disabled){background:rgba(255,255,255,.11);border-color:rgba(255,255,255,.24)}
 :root[data-theme=dark] .pill-button.danger{background:rgba(255,69,58,.14);border-color:rgba(255,69,58,.28);color:#ff6b62}
 :root[data-theme=dark] .pill-button.danger:hover:not(:disabled){background:rgba(255,69,58,.22);border-color:rgba(255,69,58,.40)}
 :root[data-theme=dark] .seg-mini{background:rgba(255,255,255,.06)}
-:root[data-theme=dark] .seg-mini button.active{background:rgba(255,255,255,.94);color:#000;box-shadow:none}
 :root[data-theme=dark] kbd{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14)}
 
 /* 守护首屏：徽章去掉渐变底，像素 Clawd 直接站在深色背景上（同 macOS） */
@@ -524,7 +747,7 @@ dialog.guard-help{width:420px;max-width:calc(100vw - 48px);padding:22px 24px}
 :root[data-theme=dark] .step.error .step-state,:root[data-theme=dark] .check.bad .check-state,:root[data-theme=dark] .env-state.fail{background:rgba(255,90,82,.16);color:#ff7b73;box-shadow:inset 0 0 0 1px rgba(255,90,82,.28)}
 :root[data-theme=dark] .step.done .step-state,:root[data-theme=dark] .check.good .check-state,:root[data-theme=dark] .env-state.ok{box-shadow:inset 0 0 0 1px rgba(48,199,123,.22)}
 :root[data-theme=dark] .env-state.warn{box-shadow:inset 0 0 0 1px rgba(255,165,36,.24)}
-:root[data-theme=dark] .tool:hover:not(:disabled){background:var(--hover)}
+:root[data-theme=dark] .tool:hover:not(:disabled){background:var(--hover);box-shadow:none}
 :root[data-theme=dark] .diagnostic{background:var(--raised)}
 
 /* 渐变卡片：深色卡 + 30% 渐变 + 同色 28% 描边 + 7% 白圆环 */
@@ -544,20 +767,13 @@ dialog.guard-help{width:420px;max-width:calc(100vw - 48px);padding:22px 24px}
 /* 配置三步 */
 :root[data-theme=dark] .stepper{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.10)}
 :root[data-theme=dark] .stepper li span{background:rgba(255,255,255,.08)}
-:root[data-theme=dark] .stepper li.active{background:rgba(255,255,255,.94);color:#000}
+:root[data-theme=dark] .stepper li.active{color:#000}
 :root[data-theme=dark] .stepper li.active span{background:#000;color:#fff}
 :root[data-theme=dark] .stepper li.done span{background:#2a9d68;color:#fff}
 :root[data-theme=dark] .detect-box{background:rgba(255,255,255,.035);border-color:var(--line)}
 /* :where 降低优先级，识别结果的绿 / 橙 / 红点仍按原规则显示 */
 :where(:root[data-theme=dark]) .detect-dot{background:rgba(255,255,255,.25)}
-:root[data-theme=dark] .segmented span{background:rgba(255,255,255,.03);border-color:var(--line)}
-:root[data-theme=dark] .segmented label:hover span{background:var(--hover)}
-:root[data-theme=dark] .segmented input:checked+span{background:var(--raised);border-color:rgba(255,255,255,.85);box-shadow:var(--ring)}
-:root[data-theme=dark] .segmented span::after{border-color:rgba(255,255,255,.24)}
-:root[data-theme=dark] .segmented input:checked+span::after{border-color:var(--ink)}
-:root[data-theme=dark] .node-picker{background:rgba(255,255,255,.025)}
-:root[data-theme=dark] .node-option:hover{background:var(--hover)}
-:root[data-theme=dark] .node-option:has(input:checked){background:var(--raised);box-shadow:inset 0 0 0 1px rgba(255,255,255,.85)}
+:root[data-theme=dark] .segmented input:checked+span{border-color:rgba(255,255,255,.09)}
 :root[data-theme=dark] .howto li::before{background:rgba(255,255,255,.08)}
 :root[data-theme=dark] .import-grid .checks{background:rgba(255,255,255,.03);border-color:var(--line)}
 
@@ -568,6 +784,47 @@ dialog.guard-help{width:420px;max-width:calc(100vw - 48px);padding:22px 24px}
 :root[data-theme=dark] .env-note.error{color:#ff7b73}
 
 /* 浮层 */
-:root[data-theme=dark] #toast{background:rgba(255,255,255,.94);color:#000;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+:root[data-theme=dark] #toast{background:rgba(255,255,255,.94);color:#000;box-shadow:0 2px 6px rgba(0,0,0,.4),0 16px 34px -14px rgba(0,0,0,.7)}
 :root[data-theme=dark] dialog{background:#17181c;border-color:rgba(255,255,255,.08);box-shadow:0 24px 70px rgba(0,0,0,.6)}
 :root[data-theme=dark] dialog::backdrop{background:rgba(0,0,0,.55)}
+
+/* =====================================================================
+   动效 · 只做视觉，不改行为。160–260ms，cubic-bezier(.2,.8,.2,1)，无回弹无发光。
+   不碰像素 Clawd 自己的动画（.pixel-buddy 内部与 data-clawd-motion）。
+   prefers-reduced-motion: reduce 时：不播放下列动画，所有过渡时长归零。
+   ===================================================================== */
+@keyframes gn-enter{from{opacity:0;transform:translateY(8px)}}
+@keyframes gn-swap{from{opacity:0;transform:translateY(4px)}}
+@keyframes gn-fade{from{opacity:.35}}
+@keyframes gn-settle{from{opacity:.2;transform:translateY(3px)}}
+@keyframes gn-bar{from{transform:scaleX(0)}}
+@media (prefers-reduced-motion:no-preference){
+  /* 页面切换：区块依次淡入并上移 8px，间隔 40ms；backwards 填充，结束后不留 transform */
+  .tab:not([hidden])>*{animation:gn-enter var(--t-slow) var(--ease) backwards}
+  .tab:not([hidden])>:nth-child(2){animation-delay:40ms}
+  .tab:not([hidden])>:nth-child(3){animation-delay:80ms}
+  .tab:not([hidden])>:nth-child(4){animation-delay:120ms}
+  .tab:not([hidden])>:nth-child(5){animation-delay:160ms}
+  .tab:not([hidden])>:nth-child(n+6){animation-delay:200ms}
+  .wizard-step:not([hidden]){animation:gn-enter var(--t-slow) var(--ease) backwards}
+  /* 状态切换：标题与说明交叉淡入；徽章只淡入（不动 transform，避免和 Clawd 冲突） */
+  .gn-swap{animation:gn-swap var(--t-slow) var(--ease)}
+  #clawd.gn-swap{animation:gn-fade var(--t-slow) var(--ease)}
+  #clawd[data-clawd-motion].gn-swap{animation:none}
+  /* 数字：值变化时轻轻落定 */
+  .gn-settle,.network-ip{animation:gn-settle var(--t-slow) var(--ease)}
+  input[type=checkbox]:not([role=switch]):indeterminate::after{animation:gn-bar var(--t) var(--ease)}
+  /* 浮层：出现时淡入 + 轻微位移 */
+  #toast{transition:opacity var(--t) var(--ease),translate var(--t-slow) var(--ease)}
+  @starting-style{#toast{opacity:0;translate:0 10px}}
+  .help-tip{transition:opacity var(--t) var(--ease),translate var(--t) var(--ease)}
+  @starting-style{.help-tip{opacity:0;translate:0 -4px}}
+  .help-tip[data-placement=above]{transition:opacity var(--t) var(--ease),translate var(--t) var(--ease)}
+  @starting-style{.help-tip[data-placement=above]{opacity:0;translate:0 4px}}
+  dialog[open]{transition:opacity var(--t) var(--ease),scale var(--t-slow) var(--ease)}
+  @starting-style{dialog[open]{opacity:0;scale:.98}}
+  #diagnostics:not([hidden]){animation:gn-enter var(--t-slow) var(--ease) backwards}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:0s!important;transition-delay:0s!important}
+}

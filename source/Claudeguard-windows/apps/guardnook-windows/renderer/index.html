@@ -16,6 +16,7 @@
   <script src="js/views/env.js" defer></script>
   <script src="js/views/settings.js" defer></script>
   <script src="js/app.js" defer></script>
+  <script src="js/motion.js" defer></script>
 </head>
 <body>
   <div id="panel">
@@ -43,12 +44,19 @@
                 <g class="pb-legs pb-legs-a"><rect x="4" y="12" width="1" height="2"/><rect x="6" y="12" width="1" height="2"/><rect x="8" y="12" width="1" height="2"/><rect x="10" y="12" width="1" height="2"/></g>
                 <g class="pb-legs pb-legs-b"><rect x="4" y="12" width="1" height="1"/><rect x="6" y="12" width="1" height="2"/><rect x="8" y="12" width="1" height="1"/><rect x="10" y="12" width="1" height="2"/></g>
                 <g class="pb-legs pb-legs-fold"><rect x="4" y="12" width="7" height="1"/></g>
-                <rect class="pb-body" x="3" y="6" width="9" height="6"/><rect class="pb-body" x="1" y="8" width="2" height="2"/><rect class="pb-body" x="12" y="8" width="2" height="2"/>
-                <g class="pb-gaze"><g class="pb-eyes pb-eyes-open"><rect x="5" y="7" width="1" height="2"/><rect x="9" y="7" width="1" height="2"/></g></g>
-                <g class="pb-eyes pb-eyes-closed"><rect x="4" y="8" width="2" height="1"/><rect x="9" y="8" width="2" height="1"/></g>
-                <path class="pb-eyes-dizzy" d="M4.5 7l2 2m0-2l-2 2m4-2l2 2m0-2l-2 2"/>
+                <g class="pb-legs pb-legs-tall"><rect x="4" y="12" width="1" height="3"/><rect x="6" y="12" width="1" height="3"/><rect x="8" y="12" width="1" height="3"/><rect x="10" y="12" width="1" height="3"/></g>
+                <g class="pb-legs pb-legs-crouch"><rect x="4" y="13" width="1" height="1"/><rect x="6" y="13" width="1" height="1"/><rect x="8" y="13" width="1" height="1"/><rect x="10" y="13" width="1" height="1"/></g>
+                <g class="pb-top">
+                  <rect class="pb-body" x="3" y="6" width="9" height="6"/><rect class="pb-body pb-claw pb-claw-l" x="1" y="8" width="2" height="2"/><rect class="pb-body pb-claw pb-claw-r" x="12" y="8" width="2" height="2"/>
+                  <g class="pb-gaze"><g class="pb-eyes pb-eyes-open"><rect x="5" y="7" width="1" height="2"/><rect x="9" y="7" width="1" height="2"/></g><g class="pb-eyes pb-eyes-blink"><rect x="5" y="8" width="1" height="1"/><rect x="9" y="8" width="1" height="1"/></g></g>
+                  <g class="pb-eyes pb-eyes-closed"><rect x="4" y="8" width="2" height="1"/><rect x="9" y="8" width="2" height="1"/></g>
+                  <g class="pb-eyes-dizzy"><rect x="4" y="7" width="1" height="1"/><rect x="6" y="7" width="1" height="1"/><rect x="5" y="8" width="1" height="1"/><rect x="4" y="9" width="1" height="1"/><rect x="6" y="9" width="1" height="1"/><rect x="8" y="7" width="1" height="1"/><rect x="10" y="7" width="1" height="1"/><rect x="9" y="8" width="1" height="1"/><rect x="8" y="9" width="1" height="1"/><rect x="10" y="9" width="1" height="1"/></g>
+                  <g class="pb-mouth"><rect class="pb-mouth-s" x="7" y="10" width="1" height="1"/><rect class="pb-mouth-o" x="7" y="9" width="1" height="2"/></g>
+                  <g class="pb-alert"><rect x="7" y="1" width="1" height="2"/><rect x="7" y="4" width="1" height="1"/></g>
+                  <g class="pb-stars"><rect class="pb-star s1" x="4" y="3" width="1" height="1"/><rect class="pb-star s2" x="4" y="3" width="1" height="1"/><rect class="pb-star s3" x="4" y="3" width="1" height="1"/></g>
+                </g>
               </g>
-            </svg></button><span id="guard-title">尚未配置保护</span></h1>
+            </svg><svg class="pb-ground" viewBox="-1 1 18 14" shape-rendering="crispEdges" aria-hidden="true"><g class="pb-dust"><rect class="pb-dust-l" x="3" y="13" width="1" height="1"/><rect class="pb-dust-r" x="11" y="13" width="1" height="1"/></g></svg></button><span id="guard-title">尚未配置保护</span></h1>
             <p id="guard-reason" class="lead">先识别 Clash，再选择入口节点和固定出口。</p>
             <div class="hero-actions">
               <button id="guard-primary" class="pill-button primary check-action" type="button"><span>开始配置</span></button>

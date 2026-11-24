@@ -124,7 +124,7 @@
     const badge = $('clawd')
     const buddy = badge.querySelector('.pixel-buddy')
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const chargeLimit = 900
+    const chargeLimit = 960 // 8T 蓄满
     let charge
     let frame
     let reaction
@@ -135,11 +135,16 @@
       buddy.style.removeProperty('--gaze-y')
     }
 
+    // 节拍 T：所有互动时长都是它的整数倍（与 style.css 的 Clawd 动效系统一致）
+    const T = 120
+    const unit = () => buddy.getBoundingClientRect().width / 18 // 一个精灵像素的 CSS 宽度
+
     function clearCharge() {
       cancelAnimationFrame(frame)
       const input = charge?.input
       charge = null
       buddy.style.removeProperty('transform')
+      delete badge.dataset.clawdCrouch
       if (typeof input === 'number' && badge.hasPointerCapture(input)) badge.releasePointerCapture(input)
     }
 
@@ -161,40 +166,72 @@
       }
     }
 
-    function landDizzy() {
-      badge.dataset.clawdMotion = 'dizzy'
-      play([
-        { transform: 'rotate(-12deg) scaleY(.76)', easing: 'ease-out' },
-        { transform: 'rotate(9deg) scaleY(.9)', offset: .2, easing: 'ease-in-out' },
-        { transform: 'rotate(-6deg) scaleY(.92)', offset: .43, easing: 'ease-out' },
-        { transform: 'rotate(-6deg) scaleY(.92)', offset: .76, easing: 'ease-out' },
-        { transform: 'none' },
-      ], 520)
+    // 停顿：不动 buddy，只占住互动通道 n 拍（蹲着落地、晕眩），结束后清理
+    function hold(ticks, onFinish) {
+      play([{ transform: 'none' }, { transform: 'none' }], ticks * T, onFinish)
     }
 
+    // 起跳 / 落地扬尘：地面层上的两粒像素，3T
+    let dustTimer
+    function puff() {
+      if (reducedMotion.matches) return
+      clearTimeout(dustTimer)
+      delete badge.dataset.clawdDust
+      void badge.offsetWidth
+      badge.dataset.clawdDust = ''
+      dustTimer = setTimeout(() => delete badge.dataset.clawdDust, 3 * T)
+    }
+
+    // 整格弧线：按 T/2 采样抛物线，高度取整到精灵像素，逐帧（steps）播放
+    function arc(height, ticks) {
+      const u = unit(), steps = ticks * 2
+      return Array.from({ length: steps + 1 }, (_, i) => {
+        const p = i / steps
+        return { transform: `translateY(${-Math.round(height * 4 * p * (1 - p)) * u}px)`, offset: p, easing: 'steps(1, end)' }
+      })
+    }
+
+    function land(crouch, ticks, then) {
+      badge.dataset.clawdCrouch = String(crouch)
+      puff()
+      hold(ticks, () => {
+        delete badge.dataset.clawdCrouch
+        if (then) then()
+        else delete badge.dataset.clawdMotion
+      })
+    }
+
+    function dizzy() {
+      badge.dataset.clawdMotion = 'dizzy'
+      hold(6)
+    }
+
+    // 普通跳：力度决定高度 2–5 格、时长 3–5T；落地蹲 1 格 1T。蓄满：7 格高、6T，重落地蹲 2 格 1T，再晕 6T
     function launch(force = 0, overcharged = false) {
-      const takeoff = buddy.style.transform || 'none'
       clearCharge()
       badge.dataset.clawdMotion = 'jumping'
       if (reducedMotion.matches) {
         play([{ opacity: 1 }, { opacity: .75 }, { opacity: 1 }], 160)
         return
       }
-      const peak = overcharged ? 'translate(9px,-64px) rotate(32deg)' : `translateY(-${8 + force * 28}px)`
-      play([
-        { transform: takeoff, easing: 'cubic-bezier(.23,1,.32,1)' },
-        { transform: peak, offset: .44, easing: 'cubic-bezier(.55,.02,.86,.5)' },
-        { transform: overcharged ? 'rotate(-12deg) scaleY(.76)' : 'none' },
-      ], overcharged ? 570 : 240 + force * 150, overcharged ? landDizzy : undefined)
+      puff()
+      if (overcharged) play(arc(7, 6), 6 * T, () => land(2, 1, dizzy))
+      else {
+        const ticks = 3 + Math.round(force * 2)
+        play(arc(2 + Math.round(force * 3), ticks), ticks * T, () => land(1, 1))
+      }
     }
 
-    function chargeFrame(now) {
+    // 蓄力：每 1/3 多蹲 1 格（腿缩短 → 趴地），最后 1/4 左右颤 1 格（每 T/2 换一次）
+    function chargeFrame() {
       if (!charge) return
-      const elapsed = now - charge.startedAt
+      const elapsed = performance.now() - charge.startedAt
       const force = Math.max(0, Math.min(1, elapsed / chargeLimit))
       if (!reducedMotion.matches) {
-        const shake = Math.sin(elapsed * (.048 + force * .025)) * force ** 2 * 2.2
-        buddy.style.transform = `translateX(${shake}px) scaleY(${1 - force * .28})`
+        const crouch = force < 1 / 3 ? 0 : force < 2 / 3 ? 1 : 2
+        if (crouch) badge.dataset.clawdCrouch = String(crouch)
+        const shake = force > .75 ? (Math.floor(elapsed / (T / 2)) % 2 ? 1 : -1) * charge.unit : 0
+        buddy.style.transform = shake ? `translateX(${shake}px)` : ''
       }
       if (force === 1) launch(force, true)
       else frame = requestAnimationFrame(chargeFrame)
@@ -203,7 +240,8 @@
     function startCharge(input) {
       if (charge || reaction) return false
       resetGaze()
-      charge = { input, startedAt: performance.now() }
+      stopReact()
+      charge = { input, startedAt: performance.now(), unit: unit() }
       badge.dataset.clawdMotion = 'charging'
       frame = requestAnimationFrame(chargeFrame)
       return true
@@ -227,7 +265,7 @@
     badge.addEventListener('pointerdown', event => {
       if (!event.isPrimary || event.button !== 0 || !startCharge(event.pointerId)) return
       event.preventDefault()
-      badge.focus({ preventScroll: true })
+      badge.focus({ preventScroll: true, focusVisible: false })
       badge.setPointerCapture(event.pointerId)
     })
     badge.addEventListener('pointerup', event => releaseCharge(event.pointerId))
@@ -256,7 +294,103 @@
     reducedMotion.addEventListener('change', () => {
       resetGaze()
       cancelReaction()
+      stopReact()
+      syncBusy()
     })
+
+    // ---- 状态反应：只读页面已有信号（徽章 data-tone、「连续确认」计数、检测按钮忙碌），不碰守护逻辑 ----
+    // 写在 data-clawd-react（一次性，到时自动清除）和 data-clawd-busy（检测期间）上，与 data-clawd-motion 分开；
+    // 用户蓄力 / 起跳时不开始反应，开始蓄力会立即打断反应。减少动态效果时只留一次透明度提示。
+    const summary = $('guard-summary'), samples = $('samples')
+    const REACT = { wake: 840, startle: 720, cheer: 840, nod: 360, wave: 720, yawn: 960 } // 7T 6T 7T 3T 6T 8T
+    const RANK = { wake: 2, startle: 2, cheer: 2, nod: 1, wave: 0, yawn: 0 }
+    const CUE = 360, IDLE = 45000, WAVE_GAP = 4000
+    const BUSY = '#guard .check-action.is-busy, #env-refresh.is-busy'
+    let tone = summary.dataset.tone, passes = count(), reactTimer, idleTimer, armedAt = 0, yawned = false, lastWave = -Infinity
+
+    function stopReact() {
+      clearTimeout(reactTimer)
+      delete badge.dataset.clawdReact
+    }
+
+    function react(name) {
+      if (charge || reaction || badge.dataset.clawdMotion) return
+      if (reducedMotion.matches && RANK[name] === 0) return
+      const current = badge.dataset.clawdReact
+      if (current && RANK[current] > RANK[name]) return
+      stopReact()
+      void badge.offsetWidth // 同名反应也从第一帧重播
+      badge.dataset.clawdReact = name
+      reactTimer = setTimeout(stopReact, reducedMotion.matches ? CUE : REACT[name])
+    }
+
+    function count() {
+      const match = /^(\d+)\/(\d+)$/.exec(samples.textContent.trim())
+      return match ? [Number(match[1]), Number(match[2])] : null
+    }
+
+    new MutationObserver(() => {
+      const next = summary.dataset.tone
+      if (next === tone) return
+      const prev = tone
+      tone = next
+      if (prev === 'bad' && (next === 'good' || next === 'warn')) react('wake')
+      else if (prev === 'good' && next === 'bad') react('startle')
+      else if (prev === 'warn' && next === 'good') react('cheer')
+      else stopReact()
+      armYawn(true)
+    }).observe(summary, { attributes: true, attributeFilter: ['data-tone'] })
+
+    new MutationObserver(() => {
+      const prev = passes
+      passes = count()
+      if (tone === 'warn' && passes && passes[0] > (prev?.[0] ?? 0) && passes[0] < passes[1]) react('nod')
+    }).observe(samples, { childList: true, characterData: true, subtree: true })
+
+    function syncBusy() {
+      badge.toggleAttribute('data-clawd-busy', !reducedMotion.matches && !!document.querySelector(BUSY))
+    }
+    const busyWatch = new MutationObserver(syncBusy)
+    busyWatch.observe($('guard'), { subtree: true, attributes: true, attributeFilter: ['class'] })
+    const envRefresh = $('env-refresh')
+    if (envRefresh) busyWatch.observe(envRefresh, { attributes: true, attributeFilter: ['class'] })
+
+    badge.addEventListener('pointerenter', event => {
+      if (event.pointerType === 'touch' || tone === 'bad' || performance.now() - lastWave < WAVE_GAP) return
+      lastWave = performance.now()
+      react('wave')
+    })
+
+    // 空闲哈欠：放行状态、守护页可见、45 秒没有指针 / 键盘活动时打一次；有活动后才重新计时
+    function armYawn(force) {
+      const now = performance.now()
+      if (!force && now - armedAt < 1000) return
+      armedAt = now
+      yawned = false
+      clearTimeout(idleTimer)
+      idleTimer = setTimeout(() => {
+        if (yawned || tone !== 'good' || document.hidden || store.tab !== 'guard' || badge.dataset.clawdReact) return
+        yawned = true
+        react('yawn')
+      }, IDLE)
+    }
+    for (const type of ['pointermove', 'pointerdown', 'keydown']) window.addEventListener(type, () => armYawn(false), { passive: true })
+    armYawn(true)
+
+    // 未配置时的眨眼：间隔随机 3–6s，约四分之一连眨两下（data-clawd-blink = 1 / 2）
+    function blink() {
+      setTimeout(() => {
+        if (tone === 'idle' && !reducedMotion.matches && !document.hidden && !charge && !reaction) {
+          const times = Math.random() < .25 ? '2' : '1'
+          delete badge.dataset.clawdBlink
+          void badge.offsetWidth
+          badge.dataset.clawdBlink = times
+          setTimeout(() => { if (badge.dataset.clawdBlink === times) delete badge.dataset.clawdBlink }, times === '2' ? 360 : 120)
+        }
+        blink()
+      }, 3000 + Math.random() * 3000)
+    }
+    blink()
   }
 
   function bind() {
