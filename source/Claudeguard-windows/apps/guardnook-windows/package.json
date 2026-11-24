@@ -1,7 +1,7 @@
 {
   "name": "@guardnook/share-windows",
   "productName": "ClaudeGuard",
-  "version": "1.0.2",
+  "version": "1.0.1",
   "private": true,
   "description": "ClaudeGuard fixed exit protection for Windows",
   "author": "GuardNook",
