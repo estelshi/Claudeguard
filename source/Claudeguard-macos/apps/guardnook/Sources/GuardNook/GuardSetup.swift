@@ -283,6 +283,7 @@ final class GuardSetupModel: ObservableObject {
     @Published var relayKeyword = ""
     @Published var relayNodes: Set<String> = []
     @Published private(set) var relayID: String?
+    @Published private var savedRelay: GuardSettings.Relay?
     @Published private(set) var finalClientProbe: ClaudeProbe?
     @Published private(set) var systemIPv4: NetworkExitProbe?
     @Published private(set) var systemCloudflare: NetworkExitProbe?
@@ -293,6 +294,7 @@ final class GuardSetupModel: ObservableObject {
     @Published private(set) var finalDiagnostics: GuardDiagnostics?
     @Published private(set) var verge: SetupVerge?
     @Published private(set) var vergeBusy = false
+    @Published private(set) var applyFeedback: (text: String, failed: Bool)?
     private var nextClientCheck = Date.distantPast
     var relayStatus: GuardStatus? {
         guard let relayID, finalStatus?.relay?.id == relayID else { return nil }
@@ -325,6 +327,15 @@ final class GuardSetupModel: ObservableObject {
     }
     var relayCandidates: [SetupNode] {
         nodes.filter { $0.chainError == nil && ($0.upstreamChain ?? []).isEmpty }
+    }
+    var relayCredentialsSaved: Bool {
+        guard let savedRelay else { return false }
+        return relayHost.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == savedRelay.host
+            && Int(relayPort) == savedRelay.port
+    }
+
+    private func updateSavedRelay(_ relay: GuardSettings.Relay?) {
+        savedRelay = relay.flatMap { $0.auth && RelayKeychain.contains(id: $0.id) ? $0 : nil }
     }
     private var loadedEndpoint: String?
     var selectedNode: SetupNode? { nodes.first(where: { $0.name == selected }) }
@@ -362,6 +373,7 @@ final class GuardSetupModel: ObservableObject {
         gatewayPort = String(c.gatewayPort ?? GuardSettings.gatewayPortDefault)
         startProtected = c.startProtected ?? false
         if let relay = c.relay {
+            updateSavedRelay(relay)
             relayMode = true
             deviceWide = c.deviceWide == true
             relayID = relay.id
@@ -616,6 +628,7 @@ final class GuardSetupModel: ObservableObject {
                     }
                 }.value
                 relayID = reply.relayID
+                updateSavedRelay(GuardSettings.current?.relay)
                 relayUsername = ""; relayPassword = ""; relayLink = ""
             } else {
                 let request = try input(operation: "save")
@@ -694,34 +707,26 @@ final class GuardSetupModel: ObservableObject {
         catch { verge = nil }
     }
     func applyDeviceExit() async {
+        guard !vergeBusy else { return }
         GuardLogModel.shared.record(.configuration, .info, "开始生成独立订阅")
-        if vergeBusy {
-            message = "上一个 Clash 操作还在进行，请稍候再试。"
-            return
-        }
+        message = nil
+        applyFeedback = nil
         guard let path = generatedPath ?? Self.manifestScriptPath() else {
-            message = "还没有生成脚本。请回到上一步点「确认并保存」，再回来应用。"
+            applyFeedback = ("还没有生成脚本。请回到上一步点「确认并保存」，再回来应用。", true)
             GuardLogModel.shared.record(.configuration, .error, "独立订阅未生成", detail: "缺少生成的脚本路径")
             return
         }
         generatedPath = path
-        vergeBusy = true; message = "正在生成独立订阅并重启 Clash…"
+        vergeBusy = true
+        applyFeedback = ("正在检查 Clash 配置…", false)
         defer { vergeBusy = false }
         let bundleID = "io.github.clash-verge-rev.clash-verge-rev"
         guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
               let url = app.bundleURL else {
-            message = "请打开 Clash Verge 后再接入整机固定出口。"
+            applyFeedback = ("请先打开 Clash Verge，再点「一键应用」。", true)
             return
         }
         var request: [String: Any] = ["operation": "profile-apply"]
-        if let relay = GuardSettings.current?.relay, relay.auth {
-            guard let data = RelayKeychain.load(id: relay.id),
-                  let credentials = try? JSONDecoder().decode(RelayCredentials.self, from: data) else {
-                message = "请允许 ClaudeGuard 读取中转钥匙串后再试。"
-                return
-            }
-            request["relayCredentials"] = ["username": credentials.username, "password": credentials.password]
-        }
         do {
             // A new relay cannot be measured before its GuardNook groups exist, so the
             // first apply trusts the relay address and verifies the real exit after the
@@ -731,13 +736,23 @@ final class GuardSetupModel: ObservableObject {
                 let parts = host.split(separator: ".", omittingEmptySubsequences: false)
                 guard parts.count == 4, parts.allSatisfy({ part in Int(part).map { (0...255).contains($0) } == true }) else {
                     GuardLogModel.shared.record(.configuration, .error, "独立订阅未生成", detail: "中转出口不是 IPv4 地址")
-                    message = "中转出口地址不是 IPv4，请回到上一步重新填写 SOCKS5 信息。"
+                    applyFeedback = ("中转出口地址不是 IPv4，请回到上一步重新填写 SOCKS5 信息。", true)
                     return
                 }
                 request["expectedIP"] = host
                 GuardLogModel.shared.record(.configuration, .info, "按中转地址生成订阅", detail: host)
             }
             _ = try await Task.detached { try GuardRuntime.helper(["operation": "device-prepare"]) }.value
+            if let relay = GuardSettings.current?.relay, relay.auth {
+                let id = relay.id
+                guard let data = await Task.detached(operation: { RelayKeychain.load(id: id) }).value,
+                      let credentials = try? JSONDecoder().decode(RelayCredentials.self, from: data) else {
+                    applyFeedback = ("请允许 ClaudeGuard 读取钥匙串中的中转凭据，再点「一键应用」。", true)
+                    return
+                }
+                request["relayCredentials"] = ["username": credentials.username, "password": credentials.password]
+            }
+            applyFeedback = ("正在生成独立订阅并重启 Clash…", false)
             finalClientProbe = nil; systemIPv4 = nil; systemCloudflare = nil
             guard app.terminate() else { throw SetupFailure(message: "Clash 未能退出，请重试。") }
             for _ in 0..<60 {
@@ -762,14 +777,20 @@ final class GuardSetupModel: ObservableObject {
             await GuardRuntime.shared.restart()
             nextClientCheck = .distantPast
             let name = reply.verge?.name
-            message = name.map { "已生成并选中独立订阅「\($0)」。原订阅仍在 Clash Verge 列表里。" }
+            let result = name.map { "已生成并选中独立订阅「\($0)」。原订阅仍在 Clash Verge 列表里。" }
                 ?? "已生成并选中独立订阅。原订阅仍在 Clash Verge 列表里。"
+            applyFeedback = (result, false)
             GuardLogModel.shared.record(.configuration, .success, "已生成独立订阅", detail: name ?? "")
             vergeBusy = false
             await refreshVerge()
         } catch {
             GuardLogModel.shared.record(.configuration, .error, "独立订阅生成失败", detail: error.localizedDescription)
-            showFailure(error)
+            if let failure = error as? SetupFailure, failure.personalRoutePresent {
+                let location = failure.personalScript ?? "全局扩展脚本和当前订阅的扩展脚本"
+                applyFeedback = ("Clash 仍载入个人版守护规则。若要用这套 Clash 切换到分享版，请到 Clash Verge 的「订阅」，将\(location)恢复为加入个人版之前的版本，重载订阅后再试。", true)
+            } else {
+                applyFeedback = (error.localizedDescription, true)
+            }
         }
     }
     static func manifestScriptPath() -> String? {
@@ -846,6 +867,8 @@ struct GuardSetupView: View {
                     if let message = model.message { Text(message).font(.system(size: 12)).foregroundStyle(.secondary).textSelection(.enabled) }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
+            // Keep the native focus ring inside the scroll view's clipping bounds.
+            .contentMargins(.all, 6, for: .scrollContent)
             Divider()
             HStack {
                 if model.step > 0 && !model.completed { Button("上一步") { model.step -= 1; model.confirmChanges = false } }
@@ -1124,6 +1147,10 @@ struct GuardSetupView: View {
                 TextField("用户名（可选）", text: $model.relayUsername)
                 SecureField("密码（可选）", text: $model.relayPassword)
             }
+            if model.relayCredentialsSaved {
+                Label("账号和密码已保存到钥匙串", systemImage: "checkmark.circle")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Text("预期公网 IPv4 只用来核对，不用来连接。导入中转脚本后会实测并预填，确认前不放行。")
                 .font(.caption).foregroundStyle(.secondary)
             Text("Clash 入口节点").font(.headline)
@@ -1364,6 +1391,21 @@ struct GuardSetupView: View {
                         .disabled(model.vergeBusy)
                     Button("显示生成的脚本") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }
                 }
+                if let feedback = model.applyFeedback {
+                    HStack(alignment: .top, spacing: 8) {
+                        if model.vergeBusy { ProgressView().controlSize(.small) }
+                        else if feedback.failed { Image(systemName: "exclamationmark.triangle.fill") }
+                        Text(feedback.text)
+                            .font(.system(size: 12))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
+                    .foregroundStyle(feedback.failed ? Color.orange : Color.secondary)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(feedback.failed ? Color.orange.opacity(0.12) : Color.secondary.opacity(0.08),
+                                in: RoundedRectangle(cornerRadius: 8))
+                }
                 if !selected {
                     Text("应用后会选中守护用的独立订阅，并保留原订阅。")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
@@ -1373,7 +1415,7 @@ struct GuardSetupView: View {
                         .font(.system(size: 12)).foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if model.vergeBusy { ProgressView().controlSize(.small) }
+                if model.vergeBusy && model.applyFeedback == nil { ProgressView().controlSize(.small) }
                 if let caption = model.vergeCaption { Text(caption).font(.caption).foregroundStyle(.secondary) }
                 Text("脚本含出口和网关凭据，只在本机使用，不要分享。").font(.caption).foregroundStyle(.secondary)
             }

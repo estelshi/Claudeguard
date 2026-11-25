@@ -66,16 +66,26 @@ function harness(c, supported = true) {
   const controller = { request: async path => values[path], select: async () => {} }
   let until = 0, ip = c.expectedIP, fault, ipv6 = false
   const gateway = { closeAll() { until = 0 }, grant(value) { until = value }, status: () => ({ open: Date.now() < until, expiresAt: until }) }
-  const guard = createGuard(c, controller, gateway, async () => ({ ip }), { ipv6: async ({ tunnelInterface }) => {
+  let probeFails = false, diagnosticCalls = 0
+  const guard = createGuard(c, controller, gateway, async () => {
+    if (probeFails) throw new Error('Probe deadline exceeded')
+    return { ip }
+  }, { ipv6: async ({ tunnelInterface }) => {
     assert.equal(tunnelInterface, 'utun1024')
     return ipv6
   }, relayPath: async report => {
+    diagnosticCalls++
+    assert.equal(gateway.status().open, false)
     report('entry', { ok: fault !== 'entry_unavailable', durationMs: 12 })
     if (fault === 'entry_unavailable') throw new Error(fault)
     report('exit', { ok: !fault, durationMs: 15 })
     if (fault) throw new Error(fault)
   } })
-  return { guard, values, ip(value) { ip = value }, fault(value) { fault = value }, ipv6() { ipv6 = true } }
+  return {
+    guard, values, ip(value) { ip = value }, ipv6() { ipv6 = true },
+    fault(value) { fault = value; probeFails = true },
+    diagnostics: () => diagnosticCalls,
+  }
 }
 
 test('relay reports TUN re-enabled even while its rules are missing', async () => {
@@ -166,6 +176,22 @@ test('saved relay strips auth from both config copies and waits for the matching
   assert.equal((await afterImport.guard.inspect()).reason, 'relay-awaiting-confirmation')
   assert.equal((await afterImport.guard.enable()).gateway.open, false)
   assert.ok(!JSON.stringify(afterImport.guard.status()).includes(password))
+})
+
+test('relay timing upgrades old defaults and successful probes skip auxiliary SOCKS5 checks', async () => {
+  const c = validateShareConfig({ ...config(), timeoutMs: 10000, leaseMs: 20000 })
+  assert.equal(c.timeoutMs, 20000)
+  assert.equal(c.leaseMs, 30000)
+  assert.equal(validateShareConfig({ ...c, timeoutMs: 12000, leaseMs: 27000 }).timeoutMs, 12000)
+  const runtime = harness(c)
+  await runtime.guard.enable()
+  for (let sample = 1; sample < c.recoverySamples; sample++) await runtime.guard.inspect()
+  assert.equal(runtime.guard.status().phase, 'protected')
+  assert.equal(runtime.diagnostics(), 0)
+  runtime.fault()
+  assert.equal((await runtime.guard.inspect()).reason, 'egress_probe_failed')
+  assert.equal(runtime.guard.status().gateway.open, false)
+  assert.equal(runtime.diagnostics(), 1)
 })
 
 test('entry selector change keeps verified egress; changed egress blocks immediately on next check', async () => {

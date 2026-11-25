@@ -119,7 +119,7 @@ export async function prepareDeviceVerge(home) {
     if (!info.isFile() || info.size > MAX_SCRIPT) throw new Error('Clash 设置文件不可用。')
   }
   const script = await readFile(paths.script, 'utf8')
-  if (personalScript.test(script)) throw new Error('检测到个人版扩展脚本，请换用独立的 Clash 环境。')
+  if (personalScript.test(script)) throw new Error('Clash Verge 的全局扩展脚本还包含个人版规则，已停止应用。若要在这套 Clash 切换到分享版，请打开「订阅 → 全局扩展脚本」，恢复加入个人版之前的原始脚本，再重载订阅并重试。')
   const original = await readFile(paths.settings, 'utf8')
   // Only change the top-level fields this Verge version owns, preserving every
   // other preference and refusing unusual YAML instead of writing ambiguously.

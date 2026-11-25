@@ -12,6 +12,7 @@ export const entryTestURL = 'https://www.gstatic.com/generate_204'
 export const reasonActions = Object.freeze({
   entry_unavailable: { text: '没有可用的入口节点。订阅更新后，原节点名也可能已失效。', action: '重新选择入口' },
   exit_unreachable: { text: '已选入口无法连接或完成 SOCKS5 出口测试。', action: '检查出口地址与端口' },
+  egress_probe_failed: { text: 'SOCKS5 已连通，但固定出口实测未完成。', action: '重新验证出口', retry: true },
   exit_auth_failed: { text: 'SOCKS5 出口拒绝了登录凭据。', action: '重新填写出口凭据' },
   egress_mismatch: { text: 'Claude 通道实测公网 IPv4 与已确认的地址不同。', action: '检查固定出口', retry: true },
   global_ipv6_present: { text: '实测发现守护通道外的接口可以用 IPv6 出网，Claude 通道未放行。', action: '检查 IPv6 后重新验证', retry: true },

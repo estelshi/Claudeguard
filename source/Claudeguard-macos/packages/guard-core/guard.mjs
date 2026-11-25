@@ -204,12 +204,11 @@ export function createGuard(c, controller, gateway, probe, { contain, drain, rel
     const epoch = generation
     pending = (async () => {
       const started = Date.now()
-      const stages = {}
-      let egressStarted
       try {
         const policy = await readBackend()
         const { configs } = policy
         if (generation !== epoch || disposed) return snapshot()
+        if (c.relay && c.requireTun) tunEnabled = configs.tun?.enable === true
         if (c.requireTun && !c.relay) {
           const gate = tunGate(policy)
           if (gate !== true) { await blockForTun(gate); return snapshot() }
@@ -232,25 +231,46 @@ export function createGuard(c, controller, gateway, probe, { contain, drain, rel
           const node = policy.proxies.proxies[name] ?? policy.entryProvider?.proxies?.find(p => p.name === name)
           const delay = node?.history?.at(-1)?.delay
           currentEntry = typeof name === 'string' ? { name, ...(delay > 0 ? { delay } : {}) } : undefined
-          if (c.requireTun) {
-            tunEnabled = configs.tun?.enable === true
-            if (!tunEnabled) { relayStages = {}; await blockForTun('tun-required'); return snapshot() }
-          }
+          if (c.requireTun && !tunEnabled) { relayStages = {}; await blockForTun('tun-required'); return snapshot() }
           const tunnelInterface = configs.tun?.enable === true && typeof configs.tun.device === 'string' ? configs.tun.device : undefined
           if (await ipv6({ tunnelInterface })) throw new Error('global_ipv6_present')
           if (generation !== epoch || disposed) return snapshot()
-          await relayPath((stage, value) => { stages[stage] = value })
-          if (generation !== epoch || disposed) return snapshot()
         }
         const sampledAt = Date.now()
-        egressStarted = sampledAt
-        const result = await probe(c, controller, prepared ? c.probePort : c.clientPort)
+        let result
+        try {
+          result = await probe(c, controller, prepared ? c.probePort : c.clientPort)
+        } catch (error) {
+          if (!c.relay) throw error
+          if (generation !== epoch || disposed) return snapshot()
+          const at = Date.now()
+          const stages = { egress: { ok: false, durationMs: at - sampledAt } }
+          relayStages = stages
+          // Close the gate before attempting any secondary diagnosis.
+          await fail('exit_unreachable')
+          const failureEpoch = epoch + 1
+          if (generation !== failureEpoch || disposed) return snapshot()
+          let failure = 'exit_unreachable'
+          try {
+            await relayPath?.((stage, value) => { stages[stage] = value })
+            if (stages.exit?.ok) failure = 'egress_probe_failed'
+          } catch (diagnosticError) {
+            if (Object.hasOwn(reasonActions, diagnosticError.message)) failure = diagnosticError.message
+          }
+          if (generation !== failureEpoch || disposed) return snapshot()
+          reason = failure
+          sample({ at, ok: false, reason: failure, durationMs: at - sampledAt })
+          return snapshot()
+        }
         if (generation !== epoch || disposed) return snapshot()
         const verifiedAt = Date.now()
         if (c.relay && isIP(result.ip) !== 4) throw new Error(c.relay.confirmed ? 'egress_mismatch' : 'exit_unreachable')
         last = { ...result, sampledAt, verifiedAt }
         if (c.relay) {
-          relayStages = { ...stages, egress: { ok: !c.relay.confirmed || result.ip === c.expectedIP, durationMs: verifiedAt - sampledAt } }
+          relayStages = {
+            entry: { ok: true }, exit: { ok: true },
+            egress: { ok: !c.relay.confirmed || result.ip === c.expectedIP, durationMs: verifiedAt - sampledAt },
+          }
           if (!c.relay.confirmed) {
             gateway.closeAll(); state = 'observe'; reason = 'relay-awaiting-confirmation'
             return snapshot()
@@ -282,9 +302,8 @@ export function createGuard(c, controller, gateway, probe, { contain, drain, rel
         state = 'protected'; reason = 'verified-pinned-exit'
       } catch (error) {
         if (generation !== epoch || disposed) return snapshot()
-        const failure = c.relay && Object.hasOwn(reasonActions, error.message) ? error.message
-          : c.relay && stages.exit?.ok ? 'exit_unreachable' : 'probe-or-controller-unavailable'
-        if (c.relay) relayStages = { ...stages, ...(egressStarted === undefined ? {} : { egress: { ok: false, durationMs: Date.now() - egressStarted } }) }
+        const failure = c.relay && Object.hasOwn(reasonActions, error.message) ? error.message : 'probe-or-controller-unavailable'
+        if (c.relay) relayStages = {}
         sample({ at: Date.now(), ok: false, reason: failure, durationMs: Date.now() - started })
         if (enabled || c.relay) await fail(failure)
         else { gateway.closeAll(); state = 'observe'; reason = 'probe-or-controller-unavailable'; prepared = false }

@@ -168,7 +168,11 @@ export function hasPersonalRoute(proxies) {
 
 export function validateShareConfig(input) {
   const relay = input.relay == null ? undefined : normalizeRelay(input.relay)
-  const config = validateConfig({ ...input, ...(relay ? { relay } : {}) })
+  const usesLegacyRelayTiming = relay
+    && (input.timeoutMs === undefined || input.timeoutMs === DEFAULT_CONFIG.timeoutMs)
+    && (input.leaseMs === undefined || input.leaseMs === DEFAULT_CONFIG.leaseMs)
+  const relayTiming = usesLegacyRelayTiming ? { timeoutMs: 20000, leaseMs: 30000 } : {}
+  const config = validateConfig({ ...input, ...(relay ? { relay } : {}), ...relayTiming })
   if (config.serviceMode !== undefined || config.ownedProtection
     || ['policyGroup', 'pinnedProxy', 'pinnedEntry', 'gatewayProxy'].some(key => config[key] !== SHARE_IDENTITY[key]))
     throw new Error('ClaudeGuard does not accept personal or external guard configurations')

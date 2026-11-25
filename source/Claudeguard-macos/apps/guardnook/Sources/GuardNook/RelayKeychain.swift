@@ -32,6 +32,10 @@ enum RelayKeychain {
         return value as? Data
     }
 
+    static func contains(id: String) -> Bool {
+        SecItemCopyMatching(query(id) as CFDictionary, nil) == errSecSuccess
+    }
+
     static func remove(id: String) {
         SecItemDelete(query(id) as CFDictionary)
     }
