@@ -1,5 +1,13 @@
 # 变更记录
 
+## 1.0.2
+
+- 仅 Windows 更新。macOS 请继续使用 1.0.0。
+- 界面：重做多选、输入框、复选框、单选和分段控件的选中态与焦点态，并加入微动效；Clawd 动效系统按 120ms 节拍重做。
+- 修复 Windows TUN 和 SOCKS5 检查，并增加 Windows 演示视频。
+- 删除未被应用使用的公司内网中继与 usage fixture（Windows 与 macOS 的 guard-core 源码均已清理，本版不重新打包 macOS 安装包）。
+- 安装包仍未签名，且尚未在真实 Windows 设备上验收。
+
 ## 1.0.1
 
 - 仅 Windows 更新。macOS 请继续使用 1.0.0。
