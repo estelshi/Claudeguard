@@ -1293,10 +1293,10 @@ enum GuardSetupWindow {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: size.width, height: size.height),
                               styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "配置固定出口"
-        // Match the dark panel: dark chrome, title bar on the panel colour, never black.
+        // Match the dark panel: title bar on the same solid #000000 as the content area.
         window.appearance = NSAppearance(named: .darkAqua)
         window.titlebarAppearsTransparent = true
-        window.backgroundColor = NSColor(srgbRed: 0x14 / 255, green: 0x15 / 255, blue: 0x19 / 255, alpha: 1)
+        window.backgroundColor = NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
         window.contentView = NSHostingView(rootView: GuardSetupView(onFinish: { [weak window] in
             window?.performClose(nil)
         }, openExitSettings: openExitSettings))

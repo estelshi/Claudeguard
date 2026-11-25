@@ -326,6 +326,17 @@ struct GuardEnvironmentPage: View {
     private var rows: [Row] {
         var rows: [Row] = (desktop.audit?.rows ?? []).map { item in
             let split = item.detail.components(separatedBy: " · 目标 ")
+            var current = split[0]
+            var target = "—"
+            if split.count > 1 {
+                let rest = split[1]
+                if let geo = rest.range(of: "；IP 地理参考 ") {
+                    target = String(rest[..<geo.lowerBound])
+                    current += "；IP 地理参考 " + rest[geo.upperBound...]
+                } else {
+                    target = rest
+                }
+            }
             let mark: Row.Mark
             switch item.state {
                 case "ok": mark = .ok
@@ -334,8 +345,8 @@ struct GuardEnvironmentPage: View {
                 case "info": mark = .info
                 default: mark = .unknown
             }
-            return Row(id: item.id, title: item.title, current: split[0],
-                       target: split.count > 1 ? split[1] : "—", mark: mark)
+            return Row(id: item.id, title: item.title, current: current,
+                       target: target, mark: mark)
         }
         let proxy: String
         switch networkModel.env?.proxy {
@@ -431,16 +442,20 @@ struct GuardEnvironmentPage: View {
     @ViewBuilder
     private func status(_ row: Row) -> some View {
         if !row.links.isEmpty {
-            HStack(spacing: 8) {
+            VStack(alignment: .trailing, spacing: 2) {
                 ForEach(Array(row.links.enumerated()), id: \.offset) { _, link in
                     Link(destination: link.1) {
                         HStack(spacing: 2) {
                             Text(link.0)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                             Image(systemName: "arrow.up.right").font(GuardFont.make(8, .semibold))
                         }
                     }
                     .font(GuardFont.make(11, .medium))
                     .foregroundStyle(GuardInk.primary)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .lineLimit(1)
                 }
             }
         } else {

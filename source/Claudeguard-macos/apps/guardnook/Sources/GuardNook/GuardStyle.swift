@@ -53,8 +53,8 @@ enum GuardInk {
     static let strongLine = Color.white.opacity(0.12)
     static let accentFill = Color.white.opacity(0.92)
     static let accentText = Color(guardHex: 0x0F1013)
-    static let panelTop = Color(guardHex: 0x141519)
-    static let panelBottom = Color(guardHex: 0x0F1013)
+    static let panelTop = Color(guardHex: 0x000000)
+    static let panelBottom = Color(guardHex: 0x000000)
 }
 
 /// Font roles. 阿里巴巴普惠体 3.0 is not bundled with the Mac app yet, so these use the
@@ -165,21 +165,11 @@ enum GuardTone: Equatable {
 
 // MARK: - Surfaces
 
-/// Panel background: #141519 at the top fading to #0F1013 by 140 pt.
+/// Panel background: solid #000000, matching the OpenNook chrome.
 struct GuardPanelBackground: View {
     var body: some View {
-        GeometryReader { proxy in
-            LinearGradient(
-                stops: [
-                    .init(color: GuardInk.panelTop, location: 0),
-                    .init(color: GuardInk.panelBottom, location: min(1, 140 / max(proxy.size.height, 1))),
-                    .init(color: GuardInk.panelBottom, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .ignoresSafeArea()
+        GuardInk.panelTop
+            .ignoresSafeArea()
     }
 }
 
