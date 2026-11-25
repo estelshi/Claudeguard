@@ -1,12 +1,12 @@
 import NookApp
 import SwiftUI
 
-// MARK: - Dark design tokens
+// MARK: - Dark design tokens (work/mac-redesign/VISUAL-SPEC.md)
 //
-// The Windows design language (pill navigation, a headline with a coloured state
-// badge, gradient tiles, huge thin numbers) translated onto the nook's black panel.
-// main.swift pins the chrome palette to dark, so these colours are written for a
-// dark background only.
+// The Windows design language (pill navigation, gradient network cards, huge thin
+// numbers) translated onto a charcoal panel. main.swift pins the chrome palette to
+// dark, so every colour here is written for a dark background only, and nothing is
+// ever pure black.
 
 extension Color {
     /// `0xRRGGBB` in sRGB.
@@ -19,6 +19,57 @@ extension Color {
             opacity: opacity
         )
     }
+}
+
+/// Layout tokens shared by every page: 680 × 460 panel (38 top bar + 422 content).
+enum GuardMetrics {
+    static let contentHeight: CGFloat = 422
+    static let horizontal: CGFloat = 22
+    static let top: CGFloat = 24
+    static let bottom: CGFloat = 22
+    /// Between big sections.
+    static let section: CGFloat = 28
+    /// Between cards, and from a section title to its cards.
+    static let gap: CGFloat = 12
+    static let cardRadius: CGFloat = 18
+    static let networkCardHeight: CGFloat = 128
+    static let setupWindow = CGSize(width: 680, height: 560)
+}
+
+/// Text and status colours. One accent per view: the light pill (`GuardInk.accentFill`).
+enum GuardInk {
+    static let primary = Color.white.opacity(0.92)
+    static let secondary = Color.white.opacity(0.60)
+    static let tertiary = Color.white.opacity(0.38)
+    static let idleTitle = Color.white.opacity(0.80)
+    /// Warm red text: blocked headline and the measured exit that broke the rule.
+    static let badText = Color(guardHex: 0xFF8A82)
+    static let success = Color(guardHex: 0x30D158)
+    static let failure = Color(guardHex: 0xFF453A)
+    static let warning = Color(guardHex: 0xF2A93B)
+    static let checkFill = Color(guardHex: 0x30C77B, opacity: 0.16)
+    static let checkMark = Color(guardHex: 0x5FDB9C)
+    static let hairline = Color.white.opacity(0.07)
+    static let strongLine = Color.white.opacity(0.12)
+    static let accentFill = Color.white.opacity(0.92)
+    static let accentText = Color(guardHex: 0x0F1013)
+    static let panelTop = Color(guardHex: 0x141519)
+    static let panelBottom = Color(guardHex: 0x0F1013)
+}
+
+/// Font roles. 阿里巴巴普惠体 3.0 is not bundled with the Mac app yet, so these use the
+/// system font; swap the body of `make` once the font ships in Resources.
+enum GuardFont {
+    static func make(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight)
+    }
+    static let pageTitle = make(22, .semibold)
+    static let wizardTitle = make(20, .semibold)
+    static let sectionTitle = make(13, .semibold)
+    static let label = make(12, .medium)
+    static let body = make(12)
+    static let meta = make(11)
+    static func number(_ size: CGFloat) -> Font { make(size, .light).monospacedDigit() }
 }
 
 /// The gradient fills of the Windows tiles, deepened a step so white text reads on black.
@@ -42,9 +93,16 @@ enum GuardFill {
     var gradient: LinearGradient {
         LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
     }
+
+    var stroke: Color {
+        switch self {
+            case .blue: colors[1].opacity(0.30)
+            default: colors[1].opacity(0.28)
+        }
+    }
 }
 
-/// One state, as the headline badge shows it: 放行 / 确认中 / 阻断 / 未配置.
+/// One state, as the hero shows it: 放行 / 确认中 / 阻断 / 未配置.
 enum GuardTone: Equatable {
     case good
     case warn
@@ -76,21 +134,22 @@ enum GuardTone: Equatable {
         }
     }
 
-    var fill: GuardFill {
+    /// Windows `.state-badge` gradients (renderer/style.css), per tone.
+    var badgeColors: [Color] {
         switch self {
-            case .good: GuardFill.teal
-            case .warn: GuardFill.sunset
-            case .bad: GuardFill.violet
-            case .idle: GuardFill.mist
+            case .good: [Color(guardHex: 0x8DBDBF), Color(guardHex: 0xA6CFCB), Color(guardHex: 0xC4E2DA)]
+            case .warn: [Color(guardHex: 0xF8A7C6), Color(guardHex: 0xFBB59C), Color(guardHex: 0xFFD08A)]
+            case .bad: [Color(guardHex: 0x8F7AE8), Color(guardHex: 0xB98AE6), Color(guardHex: 0xEA9EC8)]
+            case .idle: [Color(guardHex: 0xD9DBE3), Color(guardHex: 0xE6E3EE), Color(guardHex: 0xEFE9EF)]
         }
     }
 
-    var mood: GuardClawd.Mood {
+    var clawd: ClawdState {
         switch self {
-            case .good: GuardClawd.Mood.walk
-            case .warn: GuardClawd.Mood.look
-            case .bad: GuardClawd.Mood.sleep
-            case .idle: GuardClawd.Mood.blink
+            case .good: .walk
+            case .warn: .look
+            case .bad: .sleep
+            case .idle: .idle
         }
     }
 
@@ -104,159 +163,184 @@ enum GuardTone: Equatable {
     }
 }
 
-// MARK: - Clawd pixel crab
+// MARK: - Surfaces
 
-/// Clawd-style pixel crab drawn from a small bitmap: walks while Claude is admitted,
-/// looks around while confirming, sleeps while blocked and blinks when unconfigured.
-/// Reduce Motion freezes it on its first frame.
-struct GuardClawd: View {
-    enum Mood {
-        case walk
-        case look
-        case sleep
-        case blink
-    }
-
-    let mood: Mood
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
+/// Panel background: #141519 at the top fading to #0F1013 by 140 pt.
+struct GuardPanelBackground: View {
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.45)) { context in
-            let tick = reduceMotion ? 0 : Int(context.date.timeIntervalSinceReferenceDate / 0.45)
-            ZStack(alignment: .topTrailing) {
-                GuardPixelSprite(rows: GuardClawd.sprite(for: mood, tick: tick))
-                if mood == .sleep {
-                    Text(tick % 2 == 0 ? "z" : "zz")
-                        .font(.system(size: 8, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white)
-                        .offset(x: 7, y: -9)
-                }
-            }
+        GeometryReader { proxy in
+            LinearGradient(
+                stops: [
+                    .init(color: GuardInk.panelTop, location: 0),
+                    .init(color: GuardInk.panelBottom, location: min(1, 140 / max(proxy.size.height, 1))),
+                    .init(color: GuardInk.panelBottom, location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
-        .accessibilityHidden(true)
-    }
-
-    // 14 columns × 7 rows. "#" shell, "o" eye, "-" closed eye, "." empty.
-    private static let top = "..##########.."
-    private static let eyesOpen = "..#o######o#.."
-    private static let eyesLeft = "..o######o##.."
-    private static let eyesRight = "..##o######o.."
-    private static let eyesClosed = "..#-######-#.."
-    private static let arms = "##############"
-    private static let lower = "..##########.."
-    private static let legsA = "..#.#....#.#.."
-    private static let legsB = "...#.#..#.#..."
-    private static let blank = ".............."
-
-    static func sprite(for mood: Mood, tick: Int) -> [String] {
-        switch mood {
-            case .walk:
-                let legs = tick % 2 == 0 ? legsA : legsB
-                return [top, eyesOpen, arms, arms, lower, legs, legs]
-            case .look:
-                let phase = tick % 4
-                let eyes = phase == 1 ? eyesLeft : phase == 3 ? eyesRight : eyesOpen
-                return [top, eyes, arms, arms, lower, legsA, legsA]
-            case .sleep:
-                return [blank, top, eyesClosed, arms, arms, lower, legsA]
-            case .blink:
-                let eyes = tick % 6 == 5 ? eyesClosed : eyesOpen
-                return [top, eyes, arms, arms, lower, legsA, legsA]
-        }
+        .ignoresSafeArea()
     }
 }
 
-/// Draws a bitmap of characters as square pixels. Shell and eye pixels are each filled
-/// as one path, so neighbouring squares never show hairline seams.
-struct GuardPixelSprite: View {
-    let rows: [String]
+/// Card: #17181C with a top light (white 3.5% → 0 over the first 70%) and a 1 px
+/// white 7% inner stroke.
+struct GuardCardModifier: ViewModifier {
+    var radius: CGFloat = GuardMetrics.cardRadius
+    var raised = false
 
-    private static let shell = Color(guardHex: 0xD97757)
-    private static let eye = Color(guardHex: 0x2A1712)
-
-    var body: some View {
-        Canvas { context, size in
-            let columns = rows.map { $0.count }.max() ?? 0
-            guard columns > 0, !rows.isEmpty else { return }
-            let raw = min(size.width / CGFloat(columns), size.height / CGFloat(rows.count))
-            let cell = raw >= 3 ? raw.rounded(.down) : raw
-            let originX = (size.width - cell * CGFloat(columns)) / 2
-            let originY = (size.height - cell * CGFloat(rows.count)) / 2
-            var shellPath = Path()
-            var eyePath = Path()
-            for (y, row) in rows.enumerated() {
-                for (x, pixel) in row.enumerated() {
-                    let rect = CGRect(
-                        x: originX + CGFloat(x) * cell,
-                        y: originY + CGFloat(y) * cell,
-                        width: cell,
-                        height: cell
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        content
+            .background {
+                ZStack {
+                    shape.fill(Color(guardHex: raised ? 0x1F2025 : 0x17181C))
+                    shape.fill(
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(raised ? 0.06 : 0.035), location: 0),
+                                .init(color: Color.white.opacity(raised ? 0.03 : 0), location: 0.7),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
-                    switch pixel {
-                        case "#":
-                            shellPath.addRect(rect)
-                        case "o":
-                            eyePath.addRect(rect)
-                        case "-":
-                            shellPath.addRect(rect)
-                            eyePath.addRect(CGRect(x: rect.minX, y: rect.midY, width: cell, height: cell / 2))
-                        default:
-                            break
-                    }
                 }
             }
-            context.fill(shellPath, with: .color(GuardPixelSprite.shell))
-            context.fill(eyePath, with: .color(GuardPixelSprite.eye))
-        }
+            .overlay(shape.strokeBorder(Color.white.opacity(raised ? 0.16 : 0.07), lineWidth: 1))
     }
 }
 
-// MARK: - Components
+/// Text field / input well: white 4.5% with a white 7% hairline, radius 10.
+struct GuardFieldModifier: ViewModifier {
+    var invalid = false
 
-/// The state mark in front of every headline: the bare crab on the panel, no backing
-/// tile (her ask 2026-11-23). The mood carries the state; the headline names it.
-struct GuardStateBadge: View {
-    let tone: GuardTone
-    var size: CGFloat = 46
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        content
+            .textFieldStyle(.plain)
+            .font(GuardFont.body)
+            .foregroundStyle(GuardInk.primary)
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background(shape.fill(Color.white.opacity(0.045)))
+            .overlay(shape.strokeBorder(invalid ? GuardInk.badText.opacity(0.7) : GuardInk.hairline, lineWidth: 1))
+    }
+}
+
+extension View {
+    func guardCard(radius: CGFloat = GuardMetrics.cardRadius, raised: Bool = false) -> some View {
+        modifier(GuardCardModifier(radius: radius, raised: raised))
+    }
+
+    func guardField(invalid: Bool = false) -> some View {
+        modifier(GuardFieldModifier(invalid: invalid))
+    }
+}
+
+// MARK: - Buttons
+
+/// Pills. `prominent` is the single light accent of a view (white 92% with dark text);
+/// the rest are neutral (white 6% fill, white 12% hairline).
+struct GuardPillButtonStyle: ButtonStyle {
+    var prominent = false
+    var height: CGFloat = 28
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(GuardFont.make(12, prominent ? .semibold : .medium))
+            .lineLimit(1)
+            .padding(.horizontal, 14)
+            .frame(height: height)
+            .foregroundStyle(prominent ? GuardInk.accentText : GuardInk.primary)
+            .background(Capsule().fill(prominent ? GuardInk.accentFill : Color.white.opacity(0.06)))
+            .overlay(Capsule().strokeBorder(prominent ? Color.clear : GuardInk.strongLine, lineWidth: 1))
+            .contentShape(Capsule())
+            .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.4)
+    }
+}
+
+/// A round neutral icon button (refresh, export, clear).
+struct GuardCircleButtonStyle: ButtonStyle {
+    var size: CGFloat = 28
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(GuardFont.make(11, .semibold))
+            .foregroundStyle(GuardInk.secondary)
+            .frame(width: size, height: size)
+            .background(Circle().fill(Color.white.opacity(0.06)))
+            .overlay(Circle().strokeBorder(GuardInk.strongLine, lineWidth: 1))
+            .contentShape(Circle())
+            .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.4)
+    }
+}
+
+/// A segmented control drawn as the tab pill: options in a faint capsule, the chosen one
+/// a light capsule with dark text.
+struct GuardSegmented<Value: Hashable>: View {
+    let options: [(Value, String)]
+    @Binding var selection: Value
+    var height: CGFloat = 26
 
     var body: some View {
-        GuardClawd(mood: tone.mood)
-            .frame(width: size, height: size * 0.68)
-            .frame(width: size, height: size)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(tone.label))
+        HStack(spacing: 2) {
+            ForEach(Array(options.enumerated()), id: \.offset) { _, option in
+                let selected = option.0 == selection
+                Button {
+                    selection = option.0
+                } label: {
+                    Text(option.1)
+                        .font(GuardFont.make(11.5, selected ? .semibold : .medium))
+                        .foregroundStyle(selected ? GuardInk.accentText : GuardInk.secondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 12)
+                        .frame(height: height - 4)
+                        .background(Capsule().fill(selected ? GuardInk.accentFill : Color.clear))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(Capsule().fill(Color.white.opacity(0.06)))
+        .overlay(Capsule().strokeBorder(GuardInk.hairline, lineWidth: 1))
     }
 }
 
-/// Headline row: badge, semibold headline, one muted reason, optional trailing action.
-struct GuardHero<Trailing: View>: View {
-    let tone: GuardTone
-    let headline: String
-    let reason: String
-    private let trailing: Trailing
-    @Environment(\.nookResolvedTheme) private var theme
+// MARK: - Text blocks
 
-    init(tone: GuardTone, headline: String, reason: String, @ViewBuilder trailing: () -> Trailing) {
-        self.tone = tone
-        self.headline = headline
-        self.reason = reason
+/// Page header for 环境 / 日志 / 设置: title 22/600, one line 12/400, trailing actions.
+struct GuardPageHeader<Trailing: View>: View {
+    let title: String
+    let subtitle: String
+    var subtitleColor: Color = GuardInk.secondary
+    private let trailing: Trailing
+
+    init(title: String, subtitle: String, subtitleColor: Color = GuardInk.secondary,
+         @ViewBuilder trailing: () -> Trailing) {
+        self.title = title
+        self.subtitle = subtitle
+        self.subtitleColor = subtitleColor
         self.trailing = trailing()
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            GuardStateBadge(tone: tone)
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(headline)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(theme.primaryLabel)
+                Text(title)
+                    .font(GuardFont.pageTitle)
+                    .foregroundStyle(GuardInk.primary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Text(reason)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(theme.secondaryLabel)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(subtitle)
+                    .font(GuardFont.body)
+                    .foregroundStyle(subtitleColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(subtitle)
             }
             Spacer(minLength: 8)
             trailing
@@ -264,15 +348,125 @@ struct GuardHero<Trailing: View>: View {
     }
 }
 
-extension GuardHero where Trailing == EmptyView {
-    init(tone: GuardTone, headline: String, reason: String) {
-        self.init(tone: tone, headline: headline, reason: reason) { EmptyView() }
+extension GuardPageHeader where Trailing == EmptyView {
+    init(title: String, subtitle: String, subtitleColor: Color = GuardInk.secondary) {
+        self.init(title: title, subtitle: subtitle, subtitleColor: subtitleColor) { EmptyView() }
     }
 }
 
-/// Faint concentric rings in a tile's lower-right corner, as on the Windows tiles.
+/// Section heading: 13/600 title, optional trailing content (age, refresh).
+struct GuardSectionTitle<Trailing: View>: View {
+    let title: String
+    private let trailing: Trailing
+
+    init(title: String, @ViewBuilder trailing: () -> Trailing) {
+        self.title = title
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(title)
+                .font(GuardFont.sectionTitle)
+                .foregroundStyle(GuardInk.primary)
+            Spacer(minLength: 8)
+            trailing
+        }
+    }
+}
+
+extension GuardSectionTitle where Trailing == EmptyView {
+    init(title: String) {
+        self.init(title: title) { EmptyView() }
+    }
+}
+
+/// A status dot with the 3 pt 18% halo used on success.
+struct GuardStatusDot: View {
+    let color: Color
+    var halo = true
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 7, height: 7)
+            .padding(3)
+            .background(Circle().fill(halo ? color.opacity(0.18) : Color.clear))
+            .accessibilityHidden(true)
+    }
+}
+
+/// Round check / cross used by wizard checklists.
+struct GuardCheckMark: View {
+    /// nil = pending.
+    let passed: Bool?
+
+    var body: some View {
+        ZStack {
+            Circle().fill(fill)
+            Image(systemName: symbol)
+                .font(GuardFont.make(8, .bold))
+                .foregroundStyle(tint)
+        }
+        .frame(width: 18, height: 18)
+        .accessibilityLabel(Text(passed == true ? "通过" : passed == false ? "未通过" : "待检测"))
+    }
+
+    private var symbol: String {
+        switch passed {
+            case .some(true): "checkmark"
+            case .some(false): "xmark"
+            case .none: "ellipsis"
+        }
+    }
+
+    private var tint: Color {
+        switch passed {
+            case .some(true): GuardInk.checkMark
+            case .some(false): GuardInk.badText
+            case .none: GuardInk.tertiary
+        }
+    }
+
+    private var fill: Color {
+        switch passed {
+            case .some(true): GuardInk.checkFill
+            case .some(false): GuardInk.failure.opacity(0.16)
+            case .none: Color.white.opacity(0.06)
+        }
+    }
+}
+
+/// Big thin number with a dimmed unit: value 30/300, unit 15/300 at white 38%.
+struct GuardNumber: View {
+    let value: String
+    var unit: String? = nil
+    var size: CGFloat = 30
+    var color: Color = GuardInk.primary
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(value)
+                .font(GuardFont.number(size))
+                .tracking(-size * 0.02)
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            if let unit {
+                Text(unit)
+                    .font(GuardFont.make(size / 2, .light))
+                    .foregroundStyle(GuardInk.tertiary)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+// MARK: - Cards
+
+/// Faint concentric rings in a gradient card's lower-right corner (every 28 pt).
 private struct GuardTileRings: View {
-    private let diameters: [CGFloat] = [64, 104, 144]
+    private let diameters: [CGFloat] = [56, 112, 168, 224]
 
     var body: some View {
         ZStack {
@@ -282,14 +476,15 @@ private struct GuardTileRings: View {
                     .frame(width: diameter, height: diameter)
             }
         }
-        .offset(x: 52, y: 60)
+        .offset(x: 84, y: 84)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 }
 
-/// Gradient tile: title on top, a huge thin value, one detail line.
+/// Gradient network card (Windows finished design, dark): dot + title, IP 22/300, one
+/// source line. 128 pt high, radius 18.
 struct GuardTile: View {
     let title: String
     let value: String
@@ -297,140 +492,133 @@ struct GuardTile: View {
     var fill: GuardFill = .teal
     var dot: Color? = nil
     var valueSize: CGFloat = 22
+    /// Placeholder values (未放行, 检测中…) read quieter than an address.
+    var valueDimmed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 if let dot {
-                    Circle()
-                        .fill(dot)
-                        .frame(width: 7, height: 7)
-                        .overlay(Circle().strokeBorder(Color.white.opacity(0.9), lineWidth: 1))
+                    GuardStatusDot(color: dot)
+                        .padding(-3)
                 }
                 Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.white)
+                    .font(GuardFont.make(12, .semibold))
+                    .foregroundStyle(Color.white.opacity(0.95))
                     .lineLimit(1)
             }
-            Spacer(minLength: 12)
+            Spacer(minLength: 8)
             Text(value)
-                .font(.system(size: valueSize, weight: .light).monospacedDigit())
-                .foregroundStyle(Color.white)
+                .font(GuardFont.number(valueSize))
+                .foregroundStyle(Color.white.opacity(valueDimmed ? 0.55 : 0.95))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+                .textSelection(.enabled)
             Text(detail)
-                .font(.system(size: 10))
+                .font(GuardFont.meta)
                 .foregroundStyle(Color.white.opacity(0.62))
                 .lineLimit(1)
+                .truncationMode(.middle)
                 .padding(.top, 3)
+                .help(detail)
         }
-        .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
-        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
         .background {
-            // Toned down (her ask 2026-11-23): a dark card with the hue washed over it,
-            // instead of the full-strength gradient.
             ZStack {
                 Color(guardHex: 0x1B1C21)
                 fill.gradient.opacity(0.30)
                 GuardTileRings()
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: GuardMetrics.cardRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(fill.colors[1].opacity(0.28), lineWidth: 1)
+            RoundedRectangle(cornerRadius: GuardMetrics.cardRadius, style: .continuous)
+                .strokeBorder(fill.stroke, lineWidth: 1)
         }
     }
 }
 
-/// A big thin number with its label underneath.
-struct GuardKPI: View {
-    let value: String
-    var unit: String? = nil
+/// KPI card (Vexto): label 11.5/500 top-left, optional ↗ top-right, content at the
+/// bottom (big number, then a footnote or a 14 pt spark strip).
+struct GuardKPICard<Content: View>: View {
     let label: String
-    var tint: Color? = nil
-    @Environment(\.nookResolvedTheme) private var theme
+    var onOpen: (() -> Void)? = nil
+    var openHelp: String? = nil
+    private let content: Content
+
+    init(label: String, onOpen: (() -> Void)? = nil, openHelp: String? = nil, @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.onOpen = onOpen
+        self.openHelp = openHelp
+        self.content = content()
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .font(.system(size: 32, weight: .light).monospacedDigit())
-                    .foregroundStyle(tint ?? theme.primaryLabel)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top) {
+                Text(label)
+                    .font(GuardFont.make(11.5, .medium))
+                    .foregroundStyle(GuardInk.secondary)
                     .lineLimit(1)
-                if let unit {
-                    Text(unit)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(theme.tertiaryLabel)
+                Spacer(minLength: 4)
+                if let onOpen {
+                    Button(action: onOpen) {
+                        Image(systemName: "arrow.up.right")
+                            .font(GuardFont.make(10, .semibold))
+                            .foregroundStyle(GuardInk.tertiary)
+                            .frame(width: 18, height: 18)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(openHelp ?? "在日志中查看")
+                    .accessibilityLabel(Text(openHelp ?? "在日志中查看"))
                 }
             }
-            Text(label)
-                .font(.system(size: 10))
-                .foregroundStyle(theme.tertiaryLabel)
-                .lineLimit(1)
+            Spacer(minLength: 6)
+            content
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
+        .guardCard()
     }
 }
 
-/// Section heading: semibold title, optional muted note on the right.
-struct GuardSectionTitle: View {
-    let title: String
-    var note: String? = nil
-    @Environment(\.nookResolvedTheme) private var theme
+/// Probe results as a neutral spark strip (white 22%); failed probes are warm red.
+struct GuardSparkStrip: View {
+    /// Oldest first. nil = no reading for that slot.
+    let results: [Bool?]
+    var slots = 40
+    var height: CGFloat = 14
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(theme.primaryLabel)
-            Spacer(minLength: 8)
-            if let note {
-                Text(note)
-                    .font(.system(size: 10))
-                    .monospacedDigit()
-                    .foregroundStyle(theme.quaternaryLabel)
-                    .lineLimit(1)
+        let recent = Array(results.suffix(slots))
+        let padding = max(0, slots - recent.count)
+        GeometryReader { proxy in
+            let spacing: CGFloat = 2
+            let width = max(1, (proxy.size.width - spacing * CGFloat(slots - 1)) / CGFloat(slots))
+            HStack(alignment: .center, spacing: spacing) {
+                ForEach(0..<slots, id: \.self) { index in
+                    let value: Bool? = index < padding ? nil : recent[index - padding]
+                    RoundedRectangle(cornerRadius: 1, style: .continuous)
+                        .fill(tint(value, slot: index, padding: padding))
+                        .frame(width: width, height: value == nil ? height * 0.5 : height)
+                }
             }
+            .frame(height: height)
         }
+        .frame(height: height)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("最近 \(recent.count) 次通道验证，\(recent.filter { $0 == false }.count) 次失败"))
     }
-}
 
-/// The dark card every list sits in.
-struct GuardSurfaceModifier: ViewModifier {
-    let padding: CGFloat
-    let radius: CGFloat
-    @Environment(\.nookResolvedTheme) private var theme
-
-    func body(content: Content) -> some View {
-        content
-            .padding(padding)
-            .background(theme.subtleFill, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(theme.subtleStroke))
-    }
-}
-
-extension View {
-    func guardSurface(padding: CGFloat = 12, radius: CGFloat = 16) -> some View {
-        modifier(GuardSurfaceModifier(padding: padding, radius: radius))
-    }
-}
-
-/// Main actions. `prominent` is the light-on-dark equivalent of the Windows black
-/// primary button: a near-white pill with dark text.
-struct GuardPillButtonStyle: ButtonStyle {
-    var prominent = false
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 12, weight: prominent ? .semibold : .medium))
-            .lineLimit(1)
-            .padding(.horizontal, 14)
-            .frame(height: 28)
-            .foregroundStyle(prominent ? Color.black : Color.white.opacity(0.9))
-            .background(Capsule().fill(prominent ? Color.white.opacity(0.94) : Color.white.opacity(0.08)))
-            .overlay(Capsule().strokeBorder(Color.white.opacity(prominent ? 0 : 0.12)))
-            .contentShape(Capsule())
-            .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.4)
+    private func tint(_ value: Bool?, slot: Int, padding: Int) -> Color {
+        switch value {
+            case .some(true): Color.white.opacity(0.22)
+            case .some(false): GuardInk.badText
+            case .none: Color.white.opacity(0.08)
+        }
     }
 }
