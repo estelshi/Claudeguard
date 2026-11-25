@@ -5,12 +5,51 @@ import SwiftUI
 final class GuardNavigation: ObservableObject {
     @Published var tab: GuardTab = ProcessInfo.processInfo.arguments.contains("--logs") ? .logs
         : ProcessInfo.processInfo.arguments.contains("--environment") ? .environment
-        : .home
+        : .guardTab
+    /// The 日志 tab's category; KPI cards on 守护 jump straight to one.
+    @Published var logFilter: GuardLogFilter = .all
+
+    func openLogs(_ filter: GuardLogFilter) {
+        logFilter = filter
+        tab = .logs
+    }
+}
+
+/// Product tabs: 守护 / 环境 / 日志. The gear opens the product's own 设置 page.
+enum GuardTab: Hashable, CaseIterable {
+    case guardTab
+    case environment
+    case logs
+
+    var title: String {
+        switch self {
+            case .guardTab: "守护"
+            case .environment: "环境"
+            case .logs: "日志"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+            case .guardTab: "shield.lefthalf.filled"
+            case .environment: "slider.horizontal.3"
+            case .logs: "list.bullet.rectangle"
+        }
+    }
+
+    var help: String {
+        switch self {
+            case .guardTab: "Claude 现在是否安全：状态、网络出口与通道验证"
+            case .environment: "启动前环境检查、修复与恢复"
+            case .logs: "守护变化、连接、环境与配置记录"
+        }
+    }
 }
 
 /// Product tabs occupy the native top bar's leading cluster as one pill: the selected
 /// tab is a light capsule with a dark glyph (the dark-panel version of the Windows
-/// black pill). Icons only, so the cluster stays clear of the notch at 680 pt.
+/// black pill). Icons only, so the cluster stays clear of the notch at 680 pt. While
+/// the gear's 设置 page is open, no tab is selected.
 struct GuardTabTopBar: View {
     @ObservedObject var navigation: GuardNavigation
     let context: NookTopBarContext

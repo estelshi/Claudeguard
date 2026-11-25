@@ -54,19 +54,15 @@ final class GuardModule: NookModule {
         configuration.setCompactTrailing { EmptyView() }
         configuration.setPeek { GuardPeekView(model: model) }
         configuration.setTopBar { context in GuardTabTopBar(navigation: navigation, context: context) }
-        configuration.addSettingsSection(id: "guardnook.maintenance", title: "维护与恢复") {
-            GuardMaintenanceView()
-        }
-        configuration.addSettingsSection(id: "guardnook.startup", title: "启动", appearsFirst: true, isInitiallyExpanded: true) {
-            GuardStartupSettings()
-        }
+        // The gear opens the product's own 设置 page (fixed exit, maintenance, startup),
+        // replacing the framework screen and its display / pin pickers.
+        configuration.setSettings { GuardSettingsPage() }
         // Dark only: the restyle (GuardStyle.swift) is drawn for a black panel, so the
         // palette is pinned rather than following the system or the Settings picker.
         configuration.chromeTheme = NookTheme(accent: "#8FC9C4", palette: .dark)
         configuration.scrollEdgeFade = .standard
-        // The framework sizes the whole panel, so every tab shares this width. 680
-        // matches Nook X's home density (its home is 635) while still fitting the
-        // board's three columns; the narrower tabs stay comfortable at this size.
+        // The framework sizes the whole panel, so every tab shares this width; each page
+        // pins its own height (GuardMetrics.contentHeight) for a 680 × 460 panel.
         configuration.expandedWidth = 680
         configuration.addWidget(
             NookWidget(

@@ -40,7 +40,13 @@ final class GuardStatusMenu: NSObject, NSMenuDelegate {
         menu.showsStateColumn = false
         menu.delegate = self
         status.menu = menu
+        // 设置 › 菜单栏显示 Clawd (default on).
+        status.isVisible = UserDefaults.standard.object(forKey: guardMenuBarClawdKey) as? Bool ?? true
         item = status
+    }
+
+    func setMenuBarVisible(_ visible: Bool) {
+        item?.isVisible = visible
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

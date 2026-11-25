@@ -217,50 +217,126 @@ final class GuardDesktopModel: ObservableObject {
     }
 }
 
-struct GuardEnvironmentInspectButton: View {
-    @ObservedObject var model: GuardDesktopModel
+/// 环境: the audit as a table that fills the page. Title follows the result; refresh,
+/// 恢复记录 (with the baseline beside it) and 修复 N 项… sit at the top right.
+struct GuardEnvironmentPage: View {
+    @ObservedObject var desktop: GuardDesktopModel
     @ObservedObject var networkModel: GuardModel
-    @Environment(\.nookResolvedTheme) private var theme
+    @State private var repairing = false
+    @State private var showingRecords = false
+
+    private struct Row: Identifiable {
+        enum Mark { case ok, fixable, fail, warn, info, unknown }
+        let id: String
+        let title: String
+        let current: String
+        let target: String
+        let mark: Mark
+        var links: [(String, URL)] = []
+    }
 
     var body: some View {
-        Button {
-            networkModel.refreshLocalNow()
-            Task { await model.check(activeSTUN: true) }
-        } label: {
-            HStack(spacing: 5) {
-                if model.checking { ProgressView().controlSize(.mini) }
-                else { Image(systemName: "arrow.clockwise").font(.system(size: 10, weight: .semibold)) }
-                Text("主动检测")
+        VStack(alignment: .leading, spacing: 0) {
+            TimelineView(.periodic(from: .now, by: 5)) { _ in
+                GuardPageHeader(title: headline, subtitle: summary, subtitleColor: summaryColor) {
+                    headerActions
+                }
+            }
+            Spacer().frame(height: GuardMetrics.section)
+            table
+                .frame(maxHeight: .infinity)
+        }
+        .padding(.horizontal, GuardMetrics.horizontal)
+        .padding(.top, GuardMetrics.top)
+        .padding(.bottom, GuardMetrics.bottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .task {
+            if desktop.audit?.fresh != true { await desktop.check() }
+        }
+        .nookSheet(isPresented: $repairing) {
+            if let audit = desktop.audit { EnvironmentRepairSheet(rows: audit.rows.filter(\.fixable), model: desktop) }
+        }
+        .nookKeepsExpanded(while: $repairing)
+        .nookSheet(isPresented: $showingRecords) { EnvironmentRecordsSheet(model: desktop) }
+        .nookKeepsExpanded(while: $showingRecords)
+    }
+
+    // MARK: Header
+
+    private var headline: String {
+        guard let audit = desktop.audit else { return desktop.checking ? "正在检查环境" : "尚未检查环境" }
+        if audit.configured == false { return "基础监测 · 保护未接入" }
+        if !audit.fresh { return "环境检查已过期" }
+        return audit.ready ? "环境检查通过" : "环境需要处理"
+    }
+
+    private var summary: String {
+        if let busy = desktop.busy { return busy }
+        if let note = desktop.note { return note }
+        guard let audit = desktop.audit else {
+            return desktop.auditError ?? "读取时区、地区、语言、IPv6、TUN 与 DNS 等启动条件"
+        }
+        let checked = "检查于 \(GuardLook.time(audit.checkedAt))"
+        if audit.configured == false { return "接入固定出口后，检查结果才计入启动条件 · \(checked)" }
+        if !audit.fresh { return "结果超过两分钟，请重新检查 · \(checked)" }
+        let blocking = audit.rows.filter(\.blocking)
+        let pending = blocking.filter { $0.state != "ok" }.count
+        if audit.ready { return "\(blocking.count) 项启动条件均已满足 · \(checked)" }
+        let fixable = audit.repairIds.isEmpty ? "请按提示手动处理" : "其中 \(audit.repairIds.count) 项可自动修复"
+        return "\(pending) 项未通过，\(fixable) · \(checked)"
+    }
+
+    private var summaryColor: Color {
+        if desktop.busy != nil || desktop.auditError != nil { return GuardInk.warning }
+        if let audit = desktop.audit, !audit.fresh { return GuardInk.warning }
+        return GuardInk.secondary
+    }
+
+    private var headerActions: some View {
+        HStack(spacing: 8) {
+            Button {
+                networkModel.refreshLocalNow()
+                Task { await desktop.check(activeSTUN: true) }
+            } label: {
+                if desktop.checking {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .buttonStyle(GuardCircleButtonStyle())
+            .disabled(desktop.checking || desktop.busy != nil)
+            .help("重新检查环境，并运行本进程的 STUN / UDP 探针")
+            .accessibilityLabel("重新检查环境")
+            .accessibilityIdentifier("guard.environment.inspect")
+            Button("恢复记录") { showingRecords = true }
+                .buttonStyle(GuardPillButtonStyle())
+                .help("查看环境更改并恢复；环境基线也在这里")
+            if let audit = desktop.audit, !audit.repairIds.isEmpty {
+                Button("修复 \(audit.repairIds.count) 项…") { repairing = true }
+                    .buttonStyle(GuardPillButtonStyle(prominent: true))
+                    .disabled(desktop.busy != nil || desktop.checking)
+                    .accessibilityIdentifier("guard.environment.repair")
             }
         }
-        .buttonStyle(GuardCapsuleButtonStyle(tint: theme.accent, width: GuardLook.headerActionWidth))
-        .disabled(model.checking || model.busy != nil)
-        .help("重新检查环境，并运行本进程的 STUN / UDP 探针")
-        .accessibilityIdentifier("guard.environment.inspect")
     }
-}
 
-struct GuardEnvironmentPanel: View {
-    @ObservedObject var model: GuardDesktopModel
-    @ObservedObject var networkModel: GuardModel
-    @Environment(\.nookResolvedTheme) private var theme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    // Open by default: this panel is the 环境 tab's body, so its rows are the content.
-    @State private var expanded = true
-    @State private var editingBaseline = false
-    @State private var repairing = false
-    @State private var restoring = false
+    // MARK: Table
 
-    private func color(_ row: DesktopAudit.Row) -> Color {
-        switch row.state {
-            case "ok": theme.success
-            case "fail": theme.destructive
-            case "warn": theme.warning
-            default: theme.tertiaryLabel
+    private var rows: [Row] {
+        var rows: [Row] = (desktop.audit?.rows ?? []).map { item in
+            let split = item.detail.components(separatedBy: " · 目标 ")
+            let mark: Row.Mark
+            switch item.state {
+                case "ok": mark = .ok
+                case "fail": mark = item.fixable ? .fixable : .fail
+                case "warn": mark = .warn
+                case "info": mark = .info
+                default: mark = .unknown
+            }
+            return Row(id: item.id, title: item.title, current: split[0],
+                       target: split.count > 1 ? split[1] : "—", mark: mark)
         }
-    }
-
-    private var networkRows: [DesktopAudit.Row] {
         let proxy: String
         switch networkModel.env?.proxy {
             case .on(let endpoint): proxy = "已开启 · \(endpoint)"
@@ -269,206 +345,156 @@ struct GuardEnvironmentPanel: View {
             case .unknown: proxy = "未读取到配置"
             case nil: proxy = "读取中…"
         }
-        let direct = [networkModel.env?.directIP, networkModel.env?.directGeo]
-            .compactMap { $0 }.joined(separator: " · ")
-        return [
-            .init(id: "local-proxy", title: "系统代理", state: "info", detail: proxy, blocking: false, fixable: false),
-            .init(id: "local-direct", title: "无系统代理出口", state: "info",
-                  detail: direct.isEmpty ? (networkModel.env == nil ? "读取中…" : "未取得（出口查询失败）") : direct,
-                  blocking: false, fixable: false),
-        ]
-    }
-
-    private func rows(_ items: [DesktopAudit.Row]) -> some View {
-        VStack(spacing: 0) {
-            ForEach(items) { row in
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: row.state == "ok" ? "checkmark.circle.fill" : row.state == "fail" ? "xmark.circle.fill" : row.state == "info" ? "info.circle" : "questionmark.circle")
-                        .font(.system(size: 10))
-                        .foregroundStyle(color(row)).frame(width: 14)
-                    Text(row.title).font(.system(size: 10, weight: .medium)).frame(width: 108, alignment: .leading)
-                    Text(row.detail).font(.system(size: 10)).foregroundStyle(theme.secondaryLabel)
-                        .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.vertical, 7)
-                if row.id != items.last?.id { Divider().opacity(0.35) }
-            }
+        rows.append(Row(id: "local-proxy", title: "系统代理", current: proxy, target: "—", mark: .info))
+        var browser = Row(id: "browser", title: "浏览器旁路", current: "在实际使用的浏览器里自检",
+                          target: "DNS · WebRTC 无泄漏", mark: .info)
+        if let dns = URL(string: "https://ip.net.coffee/dns/"), let webrtc = URL(string: "https://ip.net.coffee/webrtc/") {
+            browser.links = [("DNS", dns), ("WebRTC", webrtc)]
         }
+        rows.append(browser)
+        return rows
     }
 
-    private var supplementaryDiagnostics: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Divider().overlay(theme.subtleStroke)
-            HStack(spacing: 8) {
-                Text("本机网络 · 补充诊断")
-                    .font(.system(size: 10, weight: .semibold))
-                Spacer()
-                if let measuredAt = networkModel.env?.measuredAt {
-                    Text("测得于 \(GuardLook.time(measuredAt))")
-                        .font(.system(size: 9)).monospacedDigit()
-                }
-            }
-            .foregroundStyle(theme.tertiaryLabel)
-            .padding(.top, 4)
-            rows(networkRows)
-            Text("补充诊断不计入启动条件。无系统代理查询仍受 VPN / TUN 影响，测量结果仅代表本面板的请求路径。")
-                .font(.system(size: 10))
-                .foregroundStyle(theme.quaternaryLabel)
-                .fixedSize(horizontal: false, vertical: true)
-            Divider().overlay(theme.subtleStroke).padding(.vertical, 4)
-            HStack(spacing: 12) {
-                Text("浏览器自检")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(theme.tertiaryLabel)
-                Spacer()
-                Link("DNS 检测", destination: URL(string: "https://ip.net.coffee/dns/")!)
-                    .foregroundStyle(theme.accent)
-                Link("WebRTC 检测", destination: URL(string: "https://ip.net.coffee/webrtc/")!)
-                    .foregroundStyle(theme.accent)
-            }
-            .font(.system(size: 10, weight: .medium))
-            Text("请在准备登录 Claude 的浏览器中打开检测链接；本机 DNS 和 STUN 探针不代表浏览器自身没有旁路。")
-                .font(.system(size: 10))
-                .foregroundStyle(theme.quaternaryLabel)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.bottom, 8)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text("启动前环境检查")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(theme.primaryLabel)
-                Spacer()
-                if model.checking { ProgressView().controlSize(.mini) }
-            }
-            if let audit = model.audit {
-                TimelineView(.periodic(from: .now, by: 1)) { _ in
-                    // The tab's headline already states the result; keep only when it was read.
-                    HStack(spacing: 6) {
-                        Text(audit.fresh ? "检查于 \(GuardLook.time(audit.checkedAt))" : "检查于 \(GuardLook.time(audit.checkedAt)) · 已过期")
-                            .monospacedDigit()
-                        Spacer()
-                    }
-                    .font(.system(size: 10))
-                    .foregroundStyle(audit.fresh ? theme.quaternaryLabel : theme.warning)
-                }
+    private var table: some View {
+        let items = rows
+        return VStack(alignment: .leading, spacing: 0) {
+            tableHeader
+                .padding(.bottom, 6)
+            Rectangle().fill(GuardInk.hairline).frame(height: 1)
+            if desktop.audit == nil {
+                Text(desktop.auditError ?? "正在读取本机环境…")
+                    .font(GuardFont.body)
+                    .foregroundStyle(GuardInk.tertiary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
-                Text(model.auditError ?? "正在读取本机环境…")
-                    .font(.system(size: 11)).foregroundStyle(theme.tertiaryLabel)
-            }
-            Button {
-                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
-                    expanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
-                        .frame(width: 10)
-                    Text(model.audit.map { "查看 \($0.rows.count) 项检查与补充诊断" } ?? "查看本机与浏览器补充诊断")
-                        .font(.system(size: 10, weight: .medium))
-                    Spacer(minLength: 8)
-                    Text(expanded ? "收起" : "展开")
-                        .font(.system(size: 9))
-                        .foregroundStyle(theme.quaternaryLabel)
-                }
-                .foregroundStyle(theme.secondaryLabel)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("guard.environment.disclosure")
-            .accessibilityValue(expanded ? "已展开" : "已收起")
-            .help("点击整行展开或收起检查详情")
-            if expanded {
-                VStack(alignment: .leading, spacing: 0) {
-                    if let audit = model.audit { rows(audit.rows) }
-                    supplementaryDiagnostics
-                }
-                .guardSurface(padding: 12, radius: 14)
-            }
-            if let audit = model.audit {
-                HStack(spacing: 8) {
-                    Button("环境基线") { editingBaseline = true }
-                        .buttonStyle(GuardCapsuleButtonStyle(tint: theme.secondaryLabel))
-                    Button("更改记录与恢复") { restoring = true }
-                        .buttonStyle(GuardCapsuleButtonStyle(tint: theme.secondaryLabel))
-                    Spacer()
-                    if audit.repairIds.isEmpty {
-                        Text("无可自动修复项")
-                            .font(.system(size: 10))
-                            .foregroundStyle(theme.quaternaryLabel)
-                    } else {
-                        Button("修复 \(audit.repairIds.count) 项…") { repairing = true }
-                            .buttonStyle(GuardCapsuleButtonStyle(tint: theme.warning))
-                            .disabled(model.busy != nil || model.checking)
-                            .accessibilityIdentifier("guard.environment.repair")
+                // Rows share the height left; with more rows than fit, the list scrolls.
+                GeometryReader { proxy in
+                    let rowHeight = max(34, proxy.size.height / CGFloat(max(items.count, 1)))
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 0) {
+                            ForEach(Array(items.enumerated()), id: \.element.id) { index, row in
+                                tableRow(row)
+                                    .frame(height: rowHeight - (index == items.count - 1 ? 0 : 1))
+                                if index != items.count - 1 {
+                                    Rectangle().fill(GuardInk.hairline).frame(height: 1)
+                                }
+                            }
+                        }
                     }
                 }
             }
-            if let note = model.note { Text(note).font(.system(size: 10)).foregroundStyle(theme.secondaryLabel) }
-            if let busy = model.busy { Label(busy, systemImage: "hourglass").font(.system(size: 10)).foregroundStyle(theme.warning) }
         }
-        .foregroundStyle(theme.primaryLabel)
-        .padding(.vertical, 4)
-        .nookSheet(isPresented: $editingBaseline) {
-            if let policy = model.audit?.policy { EnvironmentBaselineEditor(policy: policy, model: model) }
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+        .padding(.horizontal, 16)
+        .guardCard()
+    }
+
+    private var tableHeader: some View {
+        HStack(spacing: 12) {
+            Text("项目").frame(width: 140, alignment: .leading)
+            Text("当前").frame(maxWidth: .infinity, alignment: .leading)
+            Text("目标").frame(width: 150, alignment: .leading)
+            Text("状态").frame(width: 76, alignment: .trailing)
         }
-        .nookSheet(isPresented: $repairing) {
-            if let audit = model.audit { EnvironmentRepairSheet(rows: audit.rows.filter(\.fixable), model: model) }
+        .font(GuardFont.make(11, .medium))
+        .foregroundStyle(GuardInk.tertiary)
+    }
+
+    private func tableRow(_ row: Row) -> some View {
+        HStack(spacing: 12) {
+            Text(row.title)
+                .font(GuardFont.make(12, .medium))
+                .foregroundStyle(GuardInk.primary)
+                .lineLimit(1)
+                .frame(width: 140, alignment: .leading)
+            Text(row.current)
+                .font(GuardFont.body)
+                .foregroundStyle(GuardInk.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(row.current)
+            Text(row.target)
+                .font(GuardFont.body)
+                .foregroundStyle(GuardInk.tertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(width: 150, alignment: .leading)
+                .help(row.target)
+            status(row)
+                .frame(width: 76, alignment: .trailing)
         }
-        .nookKeepsExpanded(while: $editingBaseline)
-        .nookKeepsExpanded(while: $repairing)
-        .nookSheet(isPresented: $restoring) { GuardEnvironmentHistoryView(model: model) }
-        .nookKeepsExpanded(while: $restoring)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func status(_ row: Row) -> some View {
+        if !row.links.isEmpty {
+            HStack(spacing: 8) {
+                ForEach(Array(row.links.enumerated()), id: \.offset) { _, link in
+                    Link(destination: link.1) {
+                        HStack(spacing: 2) {
+                            Text(link.0)
+                            Image(systemName: "arrow.up.right").font(GuardFont.make(8, .semibold))
+                        }
+                    }
+                    .font(GuardFont.make(11, .medium))
+                    .foregroundStyle(GuardInk.primary)
+                }
+            }
+        } else {
+            HStack(spacing: 5) {
+                Circle().fill(color(row.mark)).frame(width: 6, height: 6)
+                Text(label(row.mark))
+                    .font(GuardFont.make(11, .medium))
+                    .foregroundStyle(row.mark == .fixable || row.mark == .fail ? GuardInk.badText : GuardInk.secondary)
+            }
+        }
+    }
+
+    private func color(_ mark: Row.Mark) -> Color {
+        switch mark {
+            case .ok: GuardInk.success
+            case .fixable, .fail: GuardInk.failure
+            case .warn: GuardInk.warning
+            case .info, .unknown: GuardInk.tertiary
+        }
+    }
+
+    private func label(_ mark: Row.Mark) -> String {
+        switch mark {
+            case .ok: "通过"
+            case .fixable: "可修复"
+            case .fail: "未通过"
+            case .warn: "需注意"
+            case .info: "信息"
+            case .unknown: "未确认"
+        }
     }
 }
 
-/// 环境 tab: one headline for the audit, then the checks with baseline, repair and restore.
-struct GuardEnvironmentTab: View {
-    @ObservedObject var desktop: GuardDesktopModel
-    @ObservedObject var networkModel: GuardModel
-
-    private var tone: GuardTone {
-        guard let audit = desktop.audit else { return .idle }
-        if audit.configured == false { return .idle }
-        if !audit.fresh { return .warn }
-        return audit.ready ? .good : .bad
-    }
-
-    private var headline: String {
-        guard let audit = desktop.audit else { return desktop.checking ? "正在检查环境…" : "尚未检查环境" }
-        if audit.configured == false { return "基础监测 · 保护未接入" }
-        if !audit.fresh { return "环境检查已过期" }
-        return audit.ready ? "环境检查通过" : "环境需要处理"
-    }
-
-    private var reason: String {
-        guard let audit = desktop.audit else { return desktop.auditError ?? "读取时区、地区、语言、IPv6、TUN 与 DNS 等启动条件。" }
-        let pending = audit.rows.filter { $0.blocking && $0.state != "ok" }.count
-        if audit.configured == false { return "接入固定出口后，检查结果才计入启动条件。" }
-        if !audit.fresh { return "结果超过两分钟，请重新检测。" }
-        if audit.ready { return "启动条件均已满足。修复前会先预览，并保留可恢复记录。" }
-        return audit.repairIds.isEmpty ? "\(pending) 项启动条件未通过，请按提示手动处理。"
-            : "\(pending) 项启动条件未通过，其中 \(audit.repairIds.count) 项可自动修复。"
-    }
+/// 恢复记录 with the environment baseline beside it, one sheet.
+private struct EnvironmentRecordsSheet: View {
+    @ObservedObject var model: GuardDesktopModel
+    @State private var page = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            TimelineView(.periodic(from: .now, by: 5)) { _ in
-                GuardHero(tone: tone, headline: headline, reason: reason) {
-                    GuardEnvironmentInspectButton(model: desktop, networkModel: networkModel)
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            GuardSegmented(options: [(0, "恢复记录"), (1, "环境基线")], selection: $page)
+                .padding(.top, 18)
+                .padding(.horizontal, 24)
+            if page == 0 {
+                GuardEnvironmentHistoryView(model: model)
+            } else if let policy = model.audit?.policy {
+                EnvironmentBaselineEditor(policy: policy, model: model)
+            } else {
+                Text("尚未取得环境检查结果，请先重新检查。")
+                    .font(GuardFont.body)
+                    .foregroundStyle(GuardInk.secondary)
+                    .padding(24)
+                    .frame(width: 480, alignment: .leading)
             }
-            GuardEnvironmentPanel(model: desktop, networkModel: networkModel)
-        }
-        .task {
-            if desktop.audit?.fresh != true { await desktop.check() }
         }
     }
 }
