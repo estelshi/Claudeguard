@@ -259,7 +259,7 @@
             </div>
 
             <div class="switch-list">
-              <label class="switch-row" id="device-wide-row"><span><strong>整机公网 TCP 使用固定出口</strong><small>不只 Claude，这台电脑的公网 TCP 都走同一个固定出口</small></span><input id="device-wide" type="checkbox" role="switch" checked></label>
+              <label class="switch-row" id="device-wide-row"><span><strong>独立订阅只保护 Claude</strong><small>其余流量继续走原订阅的节点、规则、DNS 和 UDP</small></span><input id="device-wide" type="checkbox" role="switch" disabled></label>
               <label class="switch-row"><span><strong id="tun-title">要求 Clash 开启 TUN 才放行</strong><small id="tun-hint">推荐。TUN 关闭时保持阻断。</small></span><input id="require-tun" type="checkbox" role="switch" checked></label>
               <label class="switch-row" id="start-protected-row"><span><strong>应用启动时自动验证并启用保护</strong><small>与开机自启是两项独立设置</small></span><input id="start-protected" type="checkbox" role="switch"></label>
             </div>

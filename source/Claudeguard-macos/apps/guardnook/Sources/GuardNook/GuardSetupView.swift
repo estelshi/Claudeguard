@@ -576,10 +576,7 @@ struct GuardSetupView: View {
                 Rectangle().fill(GuardInk.hairline).frame(height: 1)
                 VStack(alignment: .leading, spacing: 10) {
                     if model.relayMode {
-                        switchRow("整机固定出口", isOn: $model.deviceWide)
-                            .onChange(of: model.deviceWide) { _, _ in model.confirmChanges = false }
-                        Text(model.deviceWide ? "应用时会自动重开 Clash 并启用 TUN。浏览器和普通应用与 Claude 共用固定出口，接管的 UDP 会被阻断。"
-                             : "固定出口仅用于已接入 Claude 守护的流量。")
+                        Text("独立订阅只保护已接入 Claude 的流量；其余流量继续走原订阅的节点、规则、DNS 和 UDP。")
                             .font(GuardFont.meta)
                             .foregroundStyle(GuardInk.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -615,7 +612,7 @@ struct GuardSetupView: View {
 
     private var advancedSummary: String {
         var parts: [String] = []
-        if model.relayMode { parts.append("整机固定出口：\(model.deviceWide ? "开" : "关")") }
+        if model.relayMode { parts.append("保护范围：仅 Claude") }
         parts.append("要求 TUN：\(model.requireTun ? "开" : "关")")
         parts.append("端口与原始脚本")
         return parts.joined(separator: " · ")

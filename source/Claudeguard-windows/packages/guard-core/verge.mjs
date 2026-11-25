@@ -132,6 +132,19 @@ export async function prepareDeviceVerge(home) {
   return { path: paths.settings, original, updated }
 }
 
+
+export async function assertCompatibleVergeScript(home = homedir()) {
+  const paths = vergePaths(home)
+  let info
+  try { info = await lstat(paths.script) } catch (error) {
+    if (error && error.code === 'ENOENT') return
+    throw error
+  }
+  if (!info.isFile() || info.size > MAX_SCRIPT) throw new Error('Clash 设置文件不可用。')
+  const script = await readFile(paths.script, 'utf8')
+  if (personalScript.test(script)) throw new Error('检测到个人版扩展脚本，请换用独立的 Clash 环境。')
+}
+
 export async function applyDeviceVerge({ home, scriptText }) {
   if (!scriptText.includes('"deviceWide":true')) throw new Error('缺少整机固定出口脚本。')
   const settings = await prepareDeviceVerge(home)

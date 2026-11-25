@@ -273,7 +273,7 @@ final class GuardSetupModel: ObservableObject {
     @Published private(set) var personalRoutePresent = false
     @Published private(set) var personalScript: String?
     @Published var relayMode = false
-    @Published var deviceWide = true
+    @Published var deviceWide = false
     @Published var relayLink = ""
     @Published var relayHost = ""
     @Published var relayPort = ""
@@ -375,7 +375,8 @@ final class GuardSetupModel: ObservableObject {
         if let relay = c.relay {
             updateSavedRelay(relay)
             relayMode = true
-            deviceWide = c.deviceWide == true
+            // Historical whole-machine mode must not be offered again.
+            deviceWide = false
             relayID = relay.id
             relayHost = relay.host
             relayPort = String(relay.port)
@@ -764,7 +765,7 @@ final class GuardSetupModel: ObservableObject {
             let reply: SetupReply
             do {
                 reply = try await Task.detached { try GuardRuntime.helper(payload) }.value
-                deviceWide = true
+                deviceWide = false
             } catch {
                 NSWorkspace.shared.open(url)
                 throw error

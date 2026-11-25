@@ -154,7 +154,7 @@
     $('singbox-fields').hidden = !singbox
     $('relay-fields').hidden = !relay
     $('existing-fields').hidden = relay || singbox
-    $('device-wide-row').hidden = !relay
+    $('device-wide-row').hidden = true
     $('start-protected-row').hidden = relay
     const tun = $('require-tun')
     tun.disabled = relay
@@ -218,7 +218,7 @@
       relayLink: $('relay-link').value.trim(),
       exit: { host: $('relay-host').value.trim(), port: Number($('relay-port').value), username: $('relay-user').value, password: $('relay-password').value },
       entry: keyword ? { keyword } : { nodes: selectedEntries() },
-      deviceWide: $('device-wide').checked, selectedProxy: $('selected-proxy').value, expectedIP: $('expected-input').value.trim(),
+      deviceWide: false, selectedProxy: $('selected-proxy').value, expectedIP: $('expected-input').value.trim(),
       serverPort: Number($('server-port').value), clientPort: Number($('client-port').value), probePort: Number($('probe-port').value), gatewayPort: Number($('gateway-port').value),
       requireTun: $('require-tun').checked, startProtected: $('start-protected').checked }
   }
@@ -265,7 +265,7 @@
     $('relay-user').placeholder = settings.relay?.auth ? '已保存，留空保留' : '可留空'
     $('relay-keyword').value = settings.relay?.keyword || ''
     setEntryBy(settings.relay?.keyword ? 'keyword' : 'nodes')
-    $('device-wide').checked = settings.deviceWide !== false
+    $('device-wide').checked = false
     $('controller-url').value = settings.controllerURL || 'http://127.0.0.1:9097'
     $('controller-secret').value = ''
     GN.text('secret-hint', settings.hasSecret ? '已保存密钥，留空保留；填写可替换。' : '未设置密钥可留空。')

@@ -14,7 +14,7 @@ import { clientAdapter, localEndpoints } from './clients.mjs'
 import { measureSetup, verifySetupConfirmation } from './setup-probe.mjs'
 import { normalizeRelay, normalizeSocks5, parseSocks5Link, relayEntryMatches, relayExit } from './relay.mjs'
 import { disableSetupIPv6, changeSetupPreferences, readSetupEnvironment } from './setup-environment.mjs'
-import { applyDeviceVerge, applyVergeScript, prepareDeviceVerge, originalBackup, readVergeState, restoreVergeScript, verifyVergeLoaded } from './verge.mjs'
+import { applyVergeScript, assertCompatibleVergeScript, originalBackup, readVergeState, restoreVergeScript, verifyVergeLoaded } from './verge.mjs'
 import { installVergeProfile, standaloneStatus } from './verge-profile.mjs'
 import { isSingboxVersion, singboxCatalogue, singboxSnippet, v2raynRules, gatewayNode } from './singbox.mjs'
 
@@ -423,18 +423,11 @@ async function command() {
     if (!before?.relay) throw new Error('请先保存 SOCKS5 中转配置。')
     const snapshot = await createController(before).request('/proxies')
     if (hasPersonalRoute(snapshot.proxies)) throw personalRouteError(await personalScriptHint('verge', home))
-    await prepareDeviceVerge(home)
+    await assertCompatibleVergeScript(home)
     return { saved: true }
   }
   if (input.operation === 'device-apply') {
-    const home = homedir(), root = desktopRoot(home)
-    const config = await shareConfig(root)
-    if (!config?.relay) throw new Error('请先保存 SOCKS5 中转配置。')
-    const active = validateShareConfig({ ...config, deviceWide: true, requireTun: true })
-    const scriptText = await refreshGeneratedScript(root, input.relayCredentials, active)
-    const result = await applyDeviceVerge({ home, scriptText })
-    if (!config.deviceWide) await atomicPrivate(join(root, 'config.json'), JSON.stringify(active, null, 2))
-    return { verge: result }
+    throw new Error('整机固定出口已改为仅保护 Claude，请改用独立订阅。')
   }
   if (input.operation === 'profile-apply') {
     const home = homedir(), root = desktopRoot(home)
@@ -446,9 +439,9 @@ async function command() {
     const confirmed = config.relay.confirmed === true
     const expectedIP = confirmed ? config.expectedIP : input.expectedIP
     if (isIP(expectedIP) !== 4) throw new Error('请先保存有效的固定出口 IPv4。')
-    const active = validateShareConfig({ ...config, expectedIP, selectedProxy: relayExit, coverageVersion: 1, deviceWide: true, requireTun: true, startProtected: true, relay: { ...config.relay, confirmed: true } })
+    const active = validateShareConfig({ ...config, expectedIP, selectedProxy: relayExit, coverageVersion: 1, deviceWide: false, requireTun: config.requireTun === true, startProtected: true, relay: { ...config.relay, confirmed: true } })
     const result = await installVergeProfile({ home, config: active, credentials: input.relayCredentials })
-    if (!confirmed || !config.deviceWide || !config.startProtected || config.expectedIP !== expectedIP) await atomicPrivate(join(root, 'config.json'), JSON.stringify(active, null, 2))
+    if (!confirmed || config.deviceWide || !config.startProtected || config.expectedIP !== expectedIP) await atomicPrivate(join(root, 'config.json'), JSON.stringify(active, null, 2))
     return { verge: { ...await vergeReport(home, { loaded: false, reason: 'reload-required' }), ...result } }
   }
   if (input.operation === 'verge-apply') {
