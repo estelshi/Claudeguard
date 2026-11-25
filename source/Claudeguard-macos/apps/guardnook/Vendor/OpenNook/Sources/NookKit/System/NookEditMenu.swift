@@ -55,7 +55,7 @@ public enum NookEditMenu {
 
     private static func handlesPaste(_ menu: NSMenu) -> Bool {
         menu.items.contains { item in
-            item.action == Selector(("paste:")) || item.submenu.map(handlesPaste) == true
+            item.action == #selector(NSText.paste(_:)) || item.submenu.map(handlesPaste) == true
         }
     }
 

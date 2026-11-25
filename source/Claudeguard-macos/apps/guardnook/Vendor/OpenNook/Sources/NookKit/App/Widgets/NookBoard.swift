@@ -374,7 +374,7 @@ struct NookBoardHome: View, Sendable {
             let open: (@Sendable @MainActor () -> Void)? =
                 switch entry.widget.action {
                     case .none: nil
-                    case .openModule: switchModule.map { switchTo in { switchTo(moduleID) } }
+                    case .openModule: switchModule.map { switchTo in { @Sendable @MainActor in switchTo(moduleID) } }
                     case .perform(let action): { action() }
                 }
             let services = entry.services
