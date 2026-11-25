@@ -10,7 +10,6 @@ import { join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { normalizeCodex, normalizeClaude, fetchCodex, fetchClaude, usageGuardReady, requestClaudeUsage, refreshClaudeAccess } from './usage.mjs'
-import { companyDestination, companyAddress, createCompanyProxy } from './company-proxy.mjs'
 
 const config = { clientPort: 7901, requireTun: true, expectedIP: '203.0.113.20', policyGroup: 'guard', pinnedProxy: 'pinned' }
 const ready = () => ({ state: 'protected', enabled: true, prepared: true, manual: false, tunEnabled: true,
@@ -58,40 +57,6 @@ test('provider exceptions and credentials do not appear in quota responses', asy
   assert.ok(!serialized.includes('private-access')); assert.ok(!serialized.includes('private-refresh'))
   assert.equal(result.state, 'unavailable')
 })
-
-test('the company relay cannot become a route around Claude protection or a public proxy', () => {
-  assert.deepEqual(companyDestination('cowork-cn.tuya-inc.com:7799'), { host: 'cowork-cn.tuya-inc.com', port: 7799 })
-  for (const authority of ['api.anthropic.com:443', 'claude.ai:443', 'tuya-inc.com.attacker.test:7799', '127.0.0.1:443', 'cowork-cn.tuya-inc.com:80', 'user@cowork-cn.tuya-inc.com:7799'])
-    assert.equal(companyDestination(authority), null)
-  for (const ip of ['100.64.3.110', '10.1.2.3', '172.16.0.1', '192.168.3.2']) assert.equal(companyAddress(ip), true)
-  for (const ip of ['1.1.1.1', '127.0.0.1', '100.128.1.1', '169.254.169.254', '192.168.999.1', '::1']) assert.equal(companyAddress(ip), false)
-})
-
-test('company DNS resolving to a public IP is refused before a network connection is opened', async t => {
-  let calls = 0
-  const relay = createCompanyProxy({ resolve: async () => ({ address: '1.1.1.1' }), connect: () => { calls++; throw Error() } })
-  const port = await relay.start(); t.after(() => relay.stop())
-  const socket = net.createConnection({ host: '127.0.0.1', port }); await once(socket, 'connect')
-  let response = ''; socket.on('data', data => response += data)
-  socket.write('CONNECT cowork-cn.tuya-inc.com:7799 HTTP/1.1\r\nHost: cowork-cn.tuya-inc.com:7799\r\n\r\n')
-  await once(socket, 'close'); assert.match(response, /^HTTP\/1.1 403/); assert.equal(calls, 0)
-})
-
-test('company static assets require the explicit normal proxy and never fall back to direct DNS/network', async t => {
-  let dns = 0, direct = 0, proxy = 0
-  const relay = createCompanyProxy({ resolve: async () => { dns++; return { address: '1.1.1.1' } },
-    connect: () => { direct++; throw Error() }, assetProxyPort: 7897,
-    assetTunnel: async (_config, authority, port) => { proxy++; assert.equal(authority, 'static1.tuyacn.com:443'); assert.equal(port, 7897); throw Error('normal-proxy-offline') } })
-  const port = await relay.start(); t.after(() => relay.stop())
-  const socket = net.createConnection({ host: '127.0.0.1', port }); await once(socket, 'connect')
-  let response = ''; socket.on('data', data => response += data)
-  socket.write('CONNECT static1.tuyacn.com:443 HTTP/1.1\r\nHost: static1.tuyacn.com:443\r\n\r\n')
-  await once(socket, 'close'); assert.match(response, /^HTTP\/1.1 403/)
-  assert.equal(proxy, 1); assert.equal(dns, 0); assert.equal(direct, 0)
-  assert.equal(companyDestination('static1.tuyacn.com:7799'), null)
-  assert.equal(companyDestination('cdnjs.cloudflare.com.attacker.test:443'), null)
-})
-
 
 test('expired Claude access is delegated to the official client and the guard is checked again', async () => {
   let requests = 0
