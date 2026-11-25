@@ -8,12 +8,12 @@
 
 一个跑在本机的小守护：校验你的代理客户端规则和真实出口 IP，全部对上才放行 Claude 的流量；任何一项对不上就阻断，不回退、不偷偷换线路。
 
-1.0.1 · Windows 10 / 11 x64 · Clash Verge Rev / Mihomo · v2rayN（sing-box 内核）
+1.0.2 · Windows 10 / 11 x64 · Clash Verge Rev / Mihomo · v2rayN（sing-box 内核）
 
 </div>
 
 > [!WARNING]
-> 1.0.1 已生成 Windows x64 便携包和安装程序。安装包未签名，尚未在真实 Windows 设备上完整验收。真实 Windows 上的代理导入、系统 TUN 和应用联动仍待验证。
+> 1.0.2 已生成 Windows x64 便携包和安装程序。安装包未签名，尚未在真实 Windows 设备上完整验收。真实 Windows 上的代理导入、系统 TUN 和应用联动仍待验证。
 
 ---
 
@@ -63,9 +63,9 @@ ClaudeGuard 不提供节点、订阅或线路。你需要自己有一个固定 I
 
 ## 下载与安装
 
-安装包已作为 **v1.0.1 预发布测试版** 发布，见 [GitHub Release](https://github.com/xinghaoshi-ux/Claudeguard/releases/tag/v1.0.1)，可下载 [便携 ZIP](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.1/ClaudeGuard-1.0.1-windows-x64.zip) 或 [安装程序](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.1/ClaudeGuard-1.0.1-windows-x64-setup.exe)。可用 [SHA256SUMS.txt](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.1/SHA256SUMS.txt) 核对完整性。这不是正式稳定版，不建议在生产环境依赖。macOS 安装包仍请使用 [v1.0.0](https://github.com/xinghaoshi-ux/Claudeguard/releases/tag/v1.0.0)。也可在本平台源码目录本地构建，产物位于 `dist/`。总览见[仓库首页](../../README.md)。
+安装包已作为 **v1.0.2 预发布测试版** 发布，见 [GitHub Release](https://github.com/xinghaoshi-ux/Claudeguard/releases/tag/v1.0.2)，可下载 [便携 ZIP](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.2/ClaudeGuard-1.0.2-windows-x64.zip) 或 [安装程序](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.2/ClaudeGuard-1.0.2-windows-x64-setup.exe)。可用 [SHA256SUMS.txt](https://github.com/xinghaoshi-ux/Claudeguard/releases/download/v1.0.2/SHA256SUMS.txt) 核对完整性。这不是正式稳定版，不建议在生产环境依赖。macOS 安装包仍请使用 [v1.0.0](https://github.com/xinghaoshi-ux/Claudeguard/releases/tag/v1.0.0)。也可在本平台源码目录本地构建，产物位于 `dist/`。总览见[仓库首页](../../README.md)。
 
-适用于 Windows 10 / 11 x64。完整解压 `ClaudeGuard-1.0.1-windows-x64.zip` 后运行 `ClaudeGuard.exe`，也可使用 `ClaudeGuard-1.0.1-windows-x64-setup.exe`。发布包未签名。Clash 扩展脚本与 v2rayN 节点和路由导入步骤见 [Windows 使用指南](apps/guardnook-windows/README.md)。
+适用于 Windows 10 / 11 x64。完整解压 `ClaudeGuard-1.0.2-windows-x64.zip` 后运行 `ClaudeGuard.exe`，也可使用 `ClaudeGuard-1.0.2-windows-x64-setup.exe`。发布包未签名。Clash 扩展脚本与 v2rayN 节点和路由导入步骤见 [Windows 使用指南](apps/guardnook-windows/README.md)。
 
 ## 从源码构建
 
