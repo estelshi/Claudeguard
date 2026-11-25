@@ -215,7 +215,8 @@ struct GuardGuardPage: View {
         let value = ip ?? (!configured ? "未配置" : !admitted ? "未放行" : "检测中…")
         let detail: String
         if ip != nil, let probe = verdict.exitProbe {
-            let route = model.status?.relay?.entry?.name.map { "经 \($0)" } ?? (probe.locationLine.isEmpty ? nil : probe.locationLine)
+            let entryName = model.status?.relay?.entry?.name
+            let route = entryName.map { "经 \($0)" } ?? (probe.locationLine.isEmpty ? nil : probe.locationLine)
             let verdictText = matches ? "与固定出口一致" : "与固定出口 \(expected ?? "—") 不符"
             detail = [route, verdictText].compactMap { $0 }.joined(separator: " · ")
         } else if !configured {
