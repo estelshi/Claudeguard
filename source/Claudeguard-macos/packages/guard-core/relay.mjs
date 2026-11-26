@@ -8,6 +8,7 @@ const execute = promisify(execFile)
 export const relayEntry = '入口选择'
 export const relayExitGroup = '出口选择'
 export const relayExit = 'GN-Exit'
+export const maxRelayEntries = 64
 export const entryTestURL = 'https://www.gstatic.com/generate_204'
 export const reasonActions = Object.freeze({
   entry_unavailable: { text: '没有可用的入口节点。订阅更新后，原节点名也可能已失效。', action: '重新选择入口' },
@@ -53,7 +54,7 @@ export function normalizeRelay(input) {
     throw new Error('中转配置无效，请重新生成脚本。')
   const keyword = typeof input.keyword === 'string' ? input.keyword.trim() : ''
   const nodes = input.nodes ?? []
-  if (!Array.isArray(nodes) || nodes.length > 64 || nodes.some(name => !isRelayEntryName(name))
+  if (!Array.isArray(nodes) || nodes.length > maxRelayEntries || nodes.some(name => !isRelayEntryName(name))
     || keyword.length > 100 || /[\r\n\0,]/.test(keyword) || Boolean(keyword) === Boolean(nodes.length))
     throw new Error('请选择入口节点，或填写一个名称关键词。')
   return Object.freeze({ id: input.id, host, port, checkPort: input.checkPort, auth: input.auth,
@@ -143,6 +144,7 @@ function readExactly(socket, length, timeout) {
 }
 
 export async function checkSocks5(socket, credentials, timeout = 2500, attest = async () => {}) {
+  const deadline = Date.now() + timeout
   if (!credentials?.username || !credentials?.password) throw new Error('relay_credentials_unavailable')
   const username = Buffer.from(credentials.username), password = Buffer.from(credentials.password)
   const method = username.length ? 2 : 0
@@ -153,7 +155,9 @@ export async function checkSocks5(socket, credentials, timeout = 2500, attest = 
   await attest()
   if (reply[1] !== method) throw new Error('exit_auth_failed')
   if (!method) return
-  const auth = readExactly(socket, 2, timeout)
+  const remaining = deadline - Date.now()
+  if (remaining <= 0) throw new Error('exit_unreachable')
+  const auth = readExactly(socket, 2, remaining)
   socket.write(Buffer.concat([Buffer.from([1, username.length]), username, Buffer.from([password.length]), password]))
   const result = await auth
   if (result[0] !== 1 || result[1] !== 0) throw new Error('exit_auth_failed')
@@ -213,13 +217,19 @@ export async function globalIPv6Present(options) {
 
 export async function probeRelayPath(c, controller, credentials, report, { connect = connectTunnel } = {}) {
   const exitStart = Date.now()
+  const deadline = exitStart + c.timeoutMs
+  const remaining = () => {
+    const time = deadline - Date.now()
+    if (time <= 0) throw new Error('exit_unreachable')
+    return time
+  }
   let socket, entryConfirmed = false
   try {
     if (!credentials?.username || !credentials?.password) throw new Error('relay_credentials_unavailable')
-    socket = await connect({ ...c, timeoutMs: 4000 }, `${c.relay.host}:${c.relay.port}`, c.relay.checkPort)
+    socket = await connect({ ...c, timeoutMs: remaining() }, `${c.relay.host}:${c.relay.port}`, c.relay.checkPort)
     socket.on('error', () => {})
-    await checkSocks5(socket, credentials, 2500, async () => {
-      const connections = await controller.request('/connections', 'GET', undefined, { timeoutMs: 1200 })
+    await checkSocks5(socket, credentials, remaining(), async () => {
+      const connections = await controller.request('/connections', 'GET', undefined, { timeoutMs: Math.min(1200, remaining()) })
       const row = connections.connections?.find(item => Number(item.metadata?.sourcePort) === socket.localPort
         && Number(item.metadata?.inboundPort) === c.relay.checkPort)
       if (!row?.chains?.includes(relayEntry) || row.chains.some(name => name !== relayEntry && !relayEntryMatches(c.relay, name)))
@@ -227,6 +237,7 @@ export async function probeRelayPath(c, controller, credentials, report, { conne
       entryConfirmed = true
       report('entry', { ok: true })
     })
+    remaining()
     report('exit', { ok: true, durationMs: Date.now() - exitStart })
   } catch (error) {
     const durationMs = Date.now() - exitStart

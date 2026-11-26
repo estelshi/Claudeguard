@@ -67,7 +67,7 @@ export function applyClaudeGuard(input, options) {
   const retiredGoogle = c.guardGoogleAuth === false ? googleHosts.map(h => `DOMAIN,${h},${c.policyGroup}`) : []
   config.rules = prefix.concat(c.deviceWide ? deviceExitRules(c) : (config.rules || []).filter(r => !prefix.includes(r) && !retiredGoogle.includes(r)))
   if (c.coverageVersion === 1) {
-    if (!c.relay || c.deviceWide) config['find-process-mode'] = 'strict'
+    if (!c.relay || (c.deviceWide && c.allowUURemote === true)) config['find-process-mode'] = 'strict'
     // Only add the protected DNS policies; retain ordinary/intranet DNS and TUN.
     config.dns ||= {}
     config.dns['nameserver-policy'] ||= {}
@@ -145,7 +145,7 @@ export function composeProfileScript(originalSource, config = DEFAULT_CONFIG, re
   if (!c.proxyPassword) throw new Error('Private local proxy credentials are required')
   // The extension needs proxy credentials, but never the controller secret.
   const profileOptions = Object.fromEntries(['expectedIP', 'policyGroup', 'pinnedProxy', 'gatewayProxy', 'selectedProxy',
-    'clientPort', 'probePort', 'gatewayPort', 'proxyUser', 'proxyPassword', 'coverageVersion', 'targetPlatform', 'frozenExitProxy', 'frozenSources', 'upstreamChain', 'upstreamBindings', 'requireTun', 'guardGoogleAuth', 'gatewayAllowlist', 'ownedProtection', 'relay', 'deviceWide'].map(key => [key, c[key]]))
+    'clientPort', 'probePort', 'gatewayPort', 'proxyUser', 'proxyPassword', 'coverageVersion', 'targetPlatform', 'frozenExitProxy', 'frozenSources', 'upstreamChain', 'upstreamBindings', 'requireTun', 'guardGoogleAuth', 'gatewayAllowlist', 'ownedProtection', 'relay', 'deviceWide', 'allowUURemote'].map(key => [key, c[key]]))
   let credentials = null
   if (c.relay) {
     if (c.relay.auth !== true || !relayCredentials?.username || !relayCredentials?.password)

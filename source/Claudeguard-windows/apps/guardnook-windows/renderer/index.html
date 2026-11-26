@@ -154,6 +154,7 @@
         <article class="card setting-card">
           <div class="switch-row static"><span><strong>外观</strong><small>浅色为默认；深色适合夜间或暗光环境，标题栏按钮一起切换</small></span>
             <div class="seg-mini theme-choice" id="theme-choice" role="radiogroup" aria-label="外观"><button type="button" role="radio" data-theme-value="light" aria-checked="true" class="active">浅色</button><button type="button" role="radio" data-theme-value="dark" aria-checked="false">深色</button></div></div>
+          <label class="switch-row"><span><strong>允许 UU 远程直连</strong><small>仅 UU 远程进程绕过固定出口，Claude 不受影响。修改后需重新应用配置。</small></span><input id="uu-remote" type="checkbox" role="switch"></label>
           <label class="switch-row"><span><strong>开机自动启动</strong><small>登录 Windows 后启动 ClaudeGuard。使用免安装 ZIP 时，开启后请不要再移动文件夹。</small></span><input id="login" type="checkbox" role="switch"></label>
           <div class="switch-row static"><span><strong>打开窗口</strong><small>任意位置按快捷键，或点任务栏、通知区域的 Clawd 图标</small></span><kbd>Ctrl + Alt + Space</kbd></div>
           <div class="switch-row static"><span><strong>关闭窗口</strong><small>只会最小化，守护继续运行；从通知区域菜单退出</small></span><span class="muted">最小化</span></div>
@@ -259,7 +260,7 @@
             </div>
 
             <div class="switch-list">
-              <label class="switch-row" id="device-wide-row"><span><strong>独立订阅走固定出口</strong><small>普通流量经 Pinned 固定出口，Claude 仍走独立守护通道；UDP 和 IPv6 会被阻断。已为 UU 远程单独放行直连</small></span><input id="device-wide" type="checkbox" role="switch" disabled></label>
+              <label class="switch-row" id="device-wide-row"><span><strong>独立订阅走固定出口</strong><small>普通流量经 Pinned 固定出口，Claude 仍走独立守护通道；UDP 和 IPv6 会被阻断。UU 远程直连可在「设置」中开启</small></span><input id="device-wide" type="checkbox" role="switch" disabled></label>
               <label class="switch-row"><span><strong id="tun-title">要求 Clash 开启 TUN 才放行</strong><small id="tun-hint">推荐。TUN 关闭时保持阻断。</small></span><input id="require-tun" type="checkbox" role="switch" checked></label>
               <label class="switch-row" id="start-protected-row"><span><strong>应用启动时自动验证并启用保护</strong><small>与开机自启是两项独立设置</small></span><input id="start-protected" type="checkbox" role="switch"></label>
             </div>

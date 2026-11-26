@@ -138,8 +138,21 @@ test('relay adds entry and exit selectors and a fixed exit without moving unrela
   assert.deepEqual(Array.from(renamed['proxy-groups'].find(group => group.name === '入口选择').proxies), ['REJECT'])
 })
 
-test('device-wide mode replaces ordinary rules and DNS, and requires verified TUN coverage', () => {
+test('device-wide mode keeps the subscription TUN stack and process mode unless UU Remote is allowed', () => {
   const c = validateShareConfig({ ...config(), deviceWide: true, requireTun: true })
+  assert.equal(c.allowUURemote, false)
+  const raw = profileInput()
+  raw.tun = { enable: false, stack: 'system' }
+  const result = generated(c, raw)
+  assert.deepEqual(Array.from(result.rules.slice(-deviceExitRules(c).length)), ['NETWORK,UDP,REJECT', 'IP-CIDR6,::/0,REJECT,no-resolve', `MATCH,${c.pinnedProxy}`])
+  assert.ok(uuRemoteExceptionRules().every(rule => !result.rules.includes(rule)))
+  assert.equal(result.tun.stack, 'system')
+  assert.notEqual(result['find-process-mode'], 'strict')
+  assert.throws(() => validateShareConfig({ ...c, allowUURemote: 'yes' }), /UU Remote/)
+})
+
+test('device-wide mode replaces ordinary rules and DNS, and requires verified TUN coverage', () => {
+  const c = validateShareConfig({ ...config(), deviceWide: true, requireTun: true, allowUURemote: true })
   const raw = profileInput()
   raw.listeners = [{ name: 'bypass', type: 'http', port: 48888, proxy: 'DIRECT' }]
   const result = generated(c, raw)
@@ -522,7 +535,7 @@ test('standalone file-provider nodes count as real entries without allowing miss
 })
 
 test('TUN permits shared carrier and private subnets but forbids public route exclusions', () => {
-  const config = { deviceWide: true, pinnedProxy: 'pinned' }
+  const config = { deviceWide: true, allowUURemote: true, pinnedProxy: 'pinned' }
   const parsed = deviceExitRules(config).map(text => {
     if (text.startsWith('PROCESS-NAME,')) {
       const rest = text.slice('PROCESS-NAME,'.length)

@@ -1,8 +1,8 @@
 import { isIP } from 'node:net'
 
 // After the existing guard prefix, leftover TCP goes through the pinned exit.
-// UU Remote is excepted to DIRECT (TCP and UDP) so it can stay online while
-// other UDP and IPv6 remain rejected. Process names were confirmed on macOS
+// When the user opts in (allowUURemote), UU Remote is excepted to DIRECT (TCP
+// and UDP) so it can stay online while other UDP and IPv6 remain rejected. Process names were confirmed on macOS
 // (UURemoteDaemon, UURemoteService running; UURemote, UURemoteServer,
 // UURemoteUpdater, and uuyc-cli present in UURemote.app). Windows .exe
 // counterparts are included as a best-effort match.
@@ -22,7 +22,7 @@ export function uuRemoteExceptionRules() {
 export function deviceExitRules(c) {
   if (!c.deviceWide) return []
   return [
-    ...uuRemoteExceptionRules(),
+    ...(c.allowUURemote === true ? uuRemoteExceptionRules() : []),
     'NETWORK,UDP,REJECT',
     'IP-CIDR6,::/0,REJECT,no-resolve',
     `MATCH,${c.pinnedProxy}`,
@@ -97,7 +97,7 @@ export function verifyDeviceExit(configs, rules, c, start) {
   if (tail[cutoff]?.type !== 'Network' || String(tail[cutoff].payload).toLowerCase() !== 'udp' || tail[cutoff].proxy !== 'REJECT' ||
     !['IPCIDR', 'IPCIDR6'].includes(tail[cutoff + 1]?.type) || tail[cutoff + 1].payload !== '::/0' || tail[cutoff + 1].proxy !== 'REJECT' ||
     tail[cutoff + 2]?.type !== 'Match' || tail[cutoff + 2].proxy !== c.pinnedProxy) throw new Error('device-rules-required')
-  if (!['strict', 'always'].includes(configs['find-process-mode'])) throw new Error('device-process-mode')
+  if (c.allowUURemote === true && !['strict', 'always'].includes(configs['find-process-mode'])) throw new Error('device-process-mode')
   const tun = configs.tun
   if (tun?.enable !== true) throw new Error('tun-required')
   if (tun['auto-route'] !== true || tun['strict-route'] !== true ||
@@ -117,11 +117,15 @@ export function applyDeviceExit(config, c) {
   // Keep local IPC local. Application IPv6 is rejected by the route rules.
   config.ipv6 = false
   // mixed/gvisor keep process identity for PROCESS-* rules; system stack may not.
-  config.tun = { enable: true, stack: config.tun?.stack && config.tun.stack !== 'system' ? config.tun.stack : 'mixed',
+  // Only the UU Remote exception needs that, so the subscription's own stack is
+  // otherwise kept as before.
+  const uu = c.allowUURemote === true
+  const stack = uu ? (config.tun?.stack && config.tun.stack !== 'system' ? config.tun.stack : 'mixed') : (config.tun?.stack || 'mixed')
+  config.tun = { enable: true, stack,
     'strict-route': true, 'auto-route': true, 'auto-detect-interface': true,
     'dns-hijack': ['any:53', 'tcp://any:53'] }
   // Process matching is required for the UU Remote DIRECT exception.
-  config['find-process-mode'] = 'strict'
+  if (uu) config['find-process-mode'] = 'strict'
   // A subscription-level listener may bind directly to a different exit.
   config.listeners = config.listeners.filter(l => ['GuardNook-client', 'Claude-guard-probe', 'GN-entry-check'].includes(l.name))
   if (c.relay) {

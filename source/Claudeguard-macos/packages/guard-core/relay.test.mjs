@@ -88,6 +88,21 @@ function harness(c, supported = true) {
   }
 }
 
+test('relay reports TUN re-enabled even while its rules are missing', async () => {
+  const { guard, values } = harness(validateShareConfig({ ...config(), requireTun: true }), false)
+  try {
+    values['/configs'].tun = { enable: false }
+    assert.equal(await guard.checkTun(), false)
+    values['/configs'].tun.enable = true
+    const status = await guard.inspect()
+    assert.equal(status.tunEnabled, true)
+    assert.equal(status.reason, 'guard-route-not-installed')
+    assert.equal(status.gateway.open, false)
+  } finally {
+    await guard.dispose()
+  }
+})
+
 test('SOCKS5 link requires auth and decodes literal special credentials exactly once', () => {
   assert.throws(() => parseSocks5Link(' socks5://198.51.100.7:1080 '), /请填写 SOCKS5 用户名和密码/)
   assert.deepEqual(parseSocks5Link(`socks5://u:${encodeURIComponent(password)}@relay.example:1080`),
@@ -123,8 +138,21 @@ test('relay adds entry and exit selectors and a fixed exit without moving unrela
   assert.deepEqual(Array.from(renamed['proxy-groups'].find(group => group.name === '入口选择').proxies), ['REJECT'])
 })
 
-test('device-wide mode replaces ordinary rules and DNS, and requires verified TUN coverage', () => {
+test('device-wide mode keeps the subscription TUN stack and process mode unless UU Remote is allowed', () => {
   const c = validateShareConfig({ ...config(), deviceWide: true, requireTun: true })
+  assert.equal(c.allowUURemote, false)
+  const raw = profileInput()
+  raw.tun = { enable: false, stack: 'system' }
+  const result = generated(c, raw)
+  assert.deepEqual(Array.from(result.rules.slice(-deviceExitRules(c).length)), ['NETWORK,UDP,REJECT', 'IP-CIDR6,::/0,REJECT,no-resolve', `MATCH,${c.pinnedProxy}`])
+  assert.ok(uuRemoteExceptionRules().every(rule => !result.rules.includes(rule)))
+  assert.equal(result.tun.stack, 'system')
+  assert.notEqual(result['find-process-mode'], 'strict')
+  assert.throws(() => validateShareConfig({ ...c, allowUURemote: 'yes' }), /UU Remote/)
+})
+
+test('device-wide mode replaces ordinary rules and DNS, and requires verified TUN coverage', () => {
+  const c = validateShareConfig({ ...config(), deviceWide: true, requireTun: true, allowUURemote: true })
   const raw = profileInput()
   raw.listeners = [{ name: 'bypass', type: 'http', port: 48888, proxy: 'DIRECT' }]
   const result = generated(c, raw)
@@ -477,13 +505,17 @@ test('installed Mihomo accepts the generated fixture and reports rule and proxy 
 
 test('an actual relay connection failure uses the auxiliary check only to localize the failure', async () => {
   const c = config(), receipt = []
-  const connect = async () => { throw new Error('fixture unreachable') }
+  const connect = async ({ timeoutMs }) => {
+    assert.ok(timeoutMs > 4000 && timeoutMs <= c.timeoutMs)
+    receipt.push(['connect', true])
+    throw new Error('fixture unreachable')
+  }
   const emit = (stage, result) => receipt.push([stage, result.ok])
   await assert.rejects(probeRelayPath(c, { request: async () => ({ delay: 3 }) }, credentials, emit, { connect }), /exit_unreachable/)
-  assert.deepEqual(receipt, [['entry', true], ['exit', false]])
+  assert.deepEqual(receipt, [['connect', true], ['entry', true], ['exit', false]])
   receipt.length = 0
   await assert.rejects(probeRelayPath(c, { request: async () => ({}) }, credentials, emit, { connect }), /entry_unavailable/)
-  assert.deepEqual(receipt, [['entry', false], ['exit', false]])
+  assert.deepEqual(receipt, [['connect', true], ['entry', false], ['exit', false]])
 })
 
 
@@ -503,7 +535,7 @@ test('standalone file-provider nodes count as real entries without allowing miss
 })
 
 test('TUN permits shared carrier and private subnets but forbids public route exclusions', () => {
-  const config = { deviceWide: true, pinnedProxy: 'pinned' }
+  const config = { deviceWide: true, allowUURemote: true, pinnedProxy: 'pinned' }
   const parsed = deviceExitRules(config).map(text => {
     if (text.startsWith('PROCESS-NAME,')) {
       const rest = text.slice('PROCESS-NAME,'.length)

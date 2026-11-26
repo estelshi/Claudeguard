@@ -289,6 +289,29 @@ test('re-saving the same relay keeps the verified exit and probe port', async ()
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test('re-saving a relay keeps the UU Remote preference unless the request sets it', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'guardnook-relay-uu-'))
+  const id = 'd'.repeat(32)
+  const nodes = [{ name: '入口 A', type: 'Hysteria2', udp: true, upstreamChain: [] }]
+  const save = extra => saveRelay(root, { confirmChanges: true, relayID: id,
+    exit: { host: '198.51.100.10', port: 1080, username: 'u', password: 'p' },
+    entry: { nodes: ['入口 A'] }, originalScript: 'function main(c){return c}', ...extra },
+    async () => ({ nodes, personalRoutePresent: false }))
+  const read = async () => JSON.parse(await readFile(join(root, 'config.json'), 'utf8'))
+  try {
+    await save()
+    assert.equal((await read()).allowUURemote, false)
+    await save({ allowUURemote: true })
+    assert.equal((await read()).allowUURemote, true)
+    await save()
+    assert.equal((await read()).allowUURemote, true)
+    const manifest = JSON.parse(await readFile(join(root, 'SETUP.json'), 'utf8'))
+    assert.match(await readFile(manifest.scriptPath, 'utf8'), /"allowUURemote":true/)
+    await save({ allowUURemote: false })
+    assert.equal((await read()).allowUURemote, false)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test('re-saving an empty form does not turn an authenticated relay into no-auth', async () => {
   const root = await mkdtemp(join(tmpdir(), 'guardnook-relay-empty-resave-'))
   const id = 'c'.repeat(32)

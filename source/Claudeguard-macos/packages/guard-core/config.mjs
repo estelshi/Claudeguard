@@ -44,6 +44,8 @@ export const DEFAULT_CONFIG = Object.freeze({
   leaseMs: 20000,
   recoverySamples: 3,
   deviceWide: false,
+  // Opt-in DIRECT exception for UU Remote in the standalone pinned-exit profile.
+  allowUURemote: false,
   publicTunExit: false,
   publicProxyExit: false,
   kernelProcessPath: '',
@@ -105,6 +107,7 @@ export function validateConfig(input = {}) {
     throw new Error('Invalid proxy kernel path')
   if (typeof c.deviceWide !== 'boolean') throw new Error('Invalid device-wide option')
   if (typeof c.requireTun !== 'boolean') throw new Error('Invalid TUN requirement')
+  if (typeof c.allowUURemote !== 'boolean') throw new Error('Invalid UU Remote exception setting')
   if (typeof c.guardGoogleAuth !== 'boolean') throw new Error('Invalid Google authentication routing')
   if (![0, 1].includes(c.coverageVersion)) throw new Error('Unsupported coverage version')
   if (isIP(c.expectedIP) !== 4)

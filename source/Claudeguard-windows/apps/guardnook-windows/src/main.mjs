@@ -198,6 +198,10 @@ else {
       } finally { push() }
     }, true)
     safeHandle('confirm-relay', async () => { const settings = await runtime.confirmRelay(); push(); return settings }, true)
+    safeHandle('set-uu-remote', async value => {
+      if (typeof value !== 'boolean') throw new Error('UU 远程直连设置无效。')
+      return runtime.setAllowUURemote(value)
+    }, true)
     const generatedScript = async () => {
       const manifest = await readJSON(join(directory, 'SETUP.json'), null)
       if (!manifest?.scriptPath?.startsWith(join(directory, 'Profiles') + (process.platform === 'win32' ? '\\' : '/'))) throw new Error('请先保存节点配置')

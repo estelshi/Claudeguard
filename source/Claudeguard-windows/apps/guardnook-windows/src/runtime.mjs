@@ -101,7 +101,7 @@ export async function createRuntime(serviceDirectory, directory, { loadRelayCred
     async start() { try { await start() } catch (error) { startError = describeStartError(error, config); throw error } },
     startError: () => startError,
     stop,
-    settings: () => config ? Object.fromEntries(['expectedIP', 'selectedProxy', 'controllerURL', 'serverPort', 'clientPort', 'probePort', 'gatewayPort', 'startProtected', 'requireTun', 'guardGoogleAuth', 'relay', 'deviceWide'].map(k => [k, config[k]]).concat([['hasSecret', !!config.controllerSecret]])
+    settings: () => config ? Object.fromEntries(['expectedIP', 'selectedProxy', 'controllerURL', 'serverPort', 'clientPort', 'probePort', 'gatewayPort', 'startProtected', 'requireTun', 'guardGoogleAuth', 'relay', 'deviceWide', 'allowUURemote'].map(k => [k, config[k]]).concat([['hasSecret', !!config.controllerSecret]])
       // sing-box（v2rayN）：只在该后端时出现，Clash 配置的设置项保持原样
       .concat(config.backendKind === 'singbox' ? [['backendKind', 'singbox'], ['singbox', { exitRemark: config.singbox?.exitRemark, gatewayRemark: config.singbox?.gatewayRemark,
         probeInbound: config.singbox?.probeInbound, hasConfigPath: !!config.singbox?.configPath }], ['gatewayUser', config.proxyUser]] : [])) : null,
@@ -183,6 +183,14 @@ export async function createRuntime(serviceDirectory, directory, { loadRelayCred
       if (kind === 'gateway-password') return c.proxyPassword
       if (kind === 'singbox-snippet') return JSON.stringify(singbox.singboxSnippet(c, { includePassword: true }), null, 2)
       throw new Error('未知模板')
+    },
+    // 只保存开关；规则在生成脚本 / 独立订阅里，需重新保存配置并导入后生效。
+    // 守护按已载入的配置继续运行，避免在重新应用前因规则不一致而阻断。
+    async setAllowUURemote(value) {
+      const result = await setup.setUURemote(directory, { allowUURemote: value })
+      const saved = await readJSON(join(directory, 'config.json'), null)
+      if (saved) config = validateShareConfig(saved)
+      return { ...result, settings: this.settings() }
     },
     async confirmRelay() {
       const status = running?.guard.status()

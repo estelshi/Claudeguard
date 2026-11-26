@@ -29,6 +29,7 @@ struct GuardSettings: Decodable, Sendable {
     var probePort: Int?
     var gatewayPort: Int?
     var startProtected: Bool?
+    var allowUURemote: Bool?
     var relay: Relay?
 
     static let serverPortDefault = 19791
