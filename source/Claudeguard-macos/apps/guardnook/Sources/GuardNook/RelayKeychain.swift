@@ -1,0 +1,51 @@
+import Foundation
+import Security
+
+struct RelayCredentials: Codable, Sendable {
+    var username: String
+    var password: String
+}
+
+enum RelayKeychain {
+    private static func query(_ id: String) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "local.guardnook.share.socks5",
+            kSecAttrAccount as String: id,
+        ]
+    }
+
+    static func save(_ credentials: RelayCredentials, id: String) throws {
+        let payload = try JSONEncoder().encode(credentials)
+        var item = query(id)
+        item[kSecValueData as String] = payload
+        let status = SecItemAdd(item as CFDictionary, nil)
+        if status == errSecDuplicateItem {
+            let updated = SecItemUpdate(query(id) as CFDictionary, [kSecValueData as String: payload] as CFDictionary)
+            guard updated == errSecSuccess else {
+                throw SetupFailure(message: "无法把 SOCKS5 凭据写入 ClaudeGuard 的钥匙串。未生成脚本。")
+            }
+            return
+        }
+        guard status == errSecSuccess else {
+            throw SetupFailure(message: "无法把 SOCKS5 凭据写入 ClaudeGuard 的钥匙串。未生成脚本。")
+        }
+    }
+
+    static func load(id: String) -> Data? {
+        var item = query(id)
+        item[kSecReturnData as String] = true
+        item[kSecMatchLimit as String] = kSecMatchLimitOne
+        var value: CFTypeRef?
+        guard SecItemCopyMatching(item as CFDictionary, &value) == errSecSuccess else { return nil }
+        return value as? Data
+    }
+
+    static func contains(id: String) -> Bool {
+        SecItemCopyMatching(query(id) as CFDictionary, nil) == errSecSuccess
+    }
+
+    static func remove(id: String) {
+        SecItemDelete(query(id) as CFDictionary)
+    }
+}

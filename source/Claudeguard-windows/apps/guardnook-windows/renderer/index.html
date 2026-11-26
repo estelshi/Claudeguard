@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>ClaudeGuard</title>
+  <script src="js/theme-boot.js"></script>
+  <link rel="stylesheet" href="style.css">
+  <script src="js/core.js" defer></script>
+  <script src="js/guard-model.js" defer></script>
+  <script src="js/views/guard.js" defer></script>
+  <script src="js/views/network.js" defer></script>
+  <script src="js/views/logs.js" defer></script>
+  <script src="js/views/setup.js" defer></script>
+  <script src="js/views/env.js" defer></script>
+  <script src="js/views/settings.js" defer></script>
+  <script src="js/app.js" defer></script>
+  <script src="js/motion.js" defer></script>
+</head>
+<body>
+  <div id="panel">
+    <header class="topbar">
+      <div class="brand"><span class="mark" aria-hidden="true"></span><span>ClaudeGuard</span></div>
+    </header>
+
+    <main>
+      <div class="content-bar">
+        <nav class="pills" aria-label="主导航">
+          <button type="button" data-tab="guard" class="active">Claude 守护</button>
+          <button type="button" data-tab="env">环境</button>
+          <button type="button" data-tab="logs">日志</button>
+          <button type="button" data-tab="settings">设置</button>
+        </nav>
+      </div>
+
+      <!-- ========== Claude 守护（含连接检查） ========== -->
+      <section id="guard" class="tab">
+        <div class="hero">
+          <div id="guard-summary" class="hero-main" data-tone="idle">
+            <h1 class="state-title" aria-labelledby="guard-title"><button id="clawd" class="state-badge" type="button" aria-label="按住为 Clawd 蓄力，松开起跳"><svg class="pixel-buddy" viewBox="-1 1 18 14" shape-rendering="crispEdges" aria-hidden="true">
+              <g class="pb-zzz"><g class="pb-z z1"><rect x="0" y="0" width="4" height="1"/><rect x="2" y="1" width="1" height="1"/><rect x="1" y="2" width="1" height="1"/><rect x="0" y="3" width="4" height="1"/></g><g class="pb-z z2"><rect x="0" y="0" width="4" height="1"/><rect x="2" y="1" width="1" height="1"/><rect x="1" y="2" width="1" height="1"/><rect x="0" y="3" width="4" height="1"/></g></g>
+              <g class="pb-me">
+                <g class="pb-legs pb-legs-a"><rect x="4" y="12" width="1" height="2"/><rect x="6" y="12" width="1" height="2"/><rect x="8" y="12" width="1" height="2"/><rect x="10" y="12" width="1" height="2"/></g>
+                <g class="pb-legs pb-legs-b"><rect x="4" y="12" width="1" height="1"/><rect x="6" y="12" width="1" height="2"/><rect x="8" y="12" width="1" height="1"/><rect x="10" y="12" width="1" height="2"/></g>
+                <g class="pb-legs pb-legs-fold"><rect x="4" y="12" width="7" height="1"/></g>
+                <g class="pb-legs pb-legs-tall"><rect x="4" y="12" width="1" height="3"/><rect x="6" y="12" width="1" height="3"/><rect x="8" y="12" width="1" height="3"/><rect x="10" y="12" width="1" height="3"/></g>
+                <g class="pb-legs pb-legs-crouch"><rect x="4" y="13" width="1" height="1"/><rect x="6" y="13" width="1" height="1"/><rect x="8" y="13" width="1" height="1"/><rect x="10" y="13" width="1" height="1"/></g>
+                <g class="pb-top">
+                  <rect class="pb-body" x="3" y="6" width="9" height="6"/><rect class="pb-body pb-claw pb-claw-l" x="1" y="8" width="2" height="2"/><rect class="pb-body pb-claw pb-claw-r" x="12" y="8" width="2" height="2"/>
+                  <g class="pb-gaze"><g class="pb-eyes pb-eyes-open"><rect x="5" y="7" width="1" height="2"/><rect x="9" y="7" width="1" height="2"/></g><g class="pb-eyes pb-eyes-blink"><rect x="5" y="8" width="1" height="1"/><rect x="9" y="8" width="1" height="1"/></g></g>
+                  <g class="pb-eyes pb-eyes-closed"><rect x="4" y="8" width="2" height="1"/><rect x="9" y="8" width="2" height="1"/></g>
+                  <g class="pb-eyes-dizzy"><rect x="4" y="7" width="1" height="1"/><rect x="6" y="7" width="1" height="1"/><rect x="5" y="8" width="1" height="1"/><rect x="4" y="9" width="1" height="1"/><rect x="6" y="9" width="1" height="1"/><rect x="8" y="7" width="1" height="1"/><rect x="10" y="7" width="1" height="1"/><rect x="9" y="8" width="1" height="1"/><rect x="8" y="9" width="1" height="1"/><rect x="10" y="9" width="1" height="1"/></g>
+                  <g class="pb-mouth"><rect class="pb-mouth-s" x="7" y="10" width="1" height="1"/><rect class="pb-mouth-o" x="7" y="9" width="1" height="2"/></g>
+                  <g class="pb-alert"><rect x="7" y="1" width="1" height="2"/><rect x="7" y="4" width="1" height="1"/></g>
+                  <g class="pb-stars"><rect class="pb-star s1" x="4" y="3" width="1" height="1"/><rect class="pb-star s2" x="4" y="3" width="1" height="1"/><rect class="pb-star s3" x="4" y="3" width="1" height="1"/></g>
+                </g>
+              </g>
+            </svg><svg class="pb-ground" viewBox="-1 1 18 14" shape-rendering="crispEdges" aria-hidden="true"><g class="pb-dust"><rect class="pb-dust-l" x="3" y="13" width="1" height="1"/><rect class="pb-dust-r" x="11" y="13" width="1" height="1"/></g></svg></button><span id="guard-title">尚未配置保护</span></h1>
+            <p id="guard-reason" class="lead">先识别 Clash，再选择入口节点和固定出口。</p>
+            <div class="hero-actions">
+              <button id="guard-primary" class="pill-button primary check-action" type="button"><span>开始配置</span></button>
+              <button id="guard-block" class="pill-button danger" type="button" hidden><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></svg><span>立即阻断</span></button>
+            </div>
+          </div>
+          <aside class="steps-card" aria-label="保护进度">
+            <p class="steps-title">保护进度</p>
+            <ol id="guard-steps" class="steps"></ol>
+          </aside>
+        </div>
+
+
+        <div class="net-block">
+          <div class="section-heading">
+            <div><h2>这台电脑的网络</h2><p class="subtle">Claude 守护通道经守护入口实测；其余三项是系统网络直连，不代表 Claude 通道</p></div>
+            <button type="button" id="probe-refresh" class="pill-button check-action"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg><span>重新检测</span></button>
+          </div>
+          <div id="network-cards" class="network-grid"></div>
+        </div>
+
+        <div class="kpis">
+          <div class="kpi"><small>允许的出口 IPv4</small><strong id="expected-ip">—</strong></div>
+          <div class="kpi"><small>最近实测出口</small><strong id="observed-ip">未知</strong></div>
+          <div class="kpi"><small>连续确认</small><strong id="samples">—</strong></div>
+          <div class="kpi"><small>网关连接</small><strong id="connections">0</strong></div>
+        </div>
+
+        <div class="split">
+          <article class="card checklist-card">
+            <div class="card-heading"><h2>连接检查</h2><button type="button" id="checklist-refresh" class="pill-button small check-action"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg><span>重新检查</span></button></div>
+            <ul id="connection-checks" class="checks"></ul>
+          </article>
+          <article class="card tools-card">
+            <div class="card-heading"><h2>诊断与手动操作</h2></div>
+            <div class="tool-list">
+              <button type="button" id="guard-inspect" class="tool check-action"><strong>重新验证</strong><small>重新检查规则、TUN 与出口</small></button>
+              <button type="button" id="guard-audit" class="tool check-action" aria-controls="diagnostics"><strong>检查覆盖</strong><small>域名规则与可见旁路连接</small></button>
+              <button type="button" id="guard-route" class="tool check-action" aria-controls="diagnostics"><strong>实测客户端路径</strong><small>从客户端入口发起请求，检查经过的链路和出口</small></button>
+              <button type="button" id="guard-enable" class="tool check-action"><strong>手动启用保护</strong><small>开始连续验证，通过后放行</small></button>
+              <button type="button" id="configure" class="tool"><strong>修改节点配置</strong><small>重新进入三步配置</small></button>
+            </div>
+          </article>
+          <section id="diagnostics" class="diagnostic" aria-live="polite" hidden></section>
+        </div>
+        <p class="footnote">默认要求开启 TUN；只有固定出口、守护规则和实测 IPv4 连续验证通过后才放行。退出、手动阻断、验证失效或出口变化时，进入守护网关的 Claude 请求会被阻断。绕过 <span class="client-name">Clash</span> 的流量不在网关保护范围内。匿名 HTTPS 可达不代表账号登录或 API 调用成功；检测结果 2 分钟后过期，浏览器 WebRTC 请在实际使用的浏览器里自检。</p>
+      </section>
+
+
+      <!-- ========== 环境 ========== -->
+      <section id="env" class="tab" hidden>
+        <div class="section-heading top">
+          <div><h1>环境检查</h1><p class="subtle">对照目标检查这台 Windows 的时区、地区、语言、IPv6 和 Clash 设置</p></div>
+          <div class="inline-row">
+            <button id="env-refresh" class="pill-button check-action" type="button"><span>重新检查</span></button>
+            <button id="env-repair" class="pill-button primary" type="button" disabled><span>修复…</span></button>
+          </div>
+        </div>
+        <article class="card env-card">
+          <div id="env-summary" class="env-summary" data-tone="idle">
+            <span class="status-dot" aria-hidden="true"></span>
+            <div class="env-verdict"><strong id="env-verdict">正在检查…</strong><small id="env-checked">读取 Windows 设置与 Clash 状态</small></div>
+            <div class="env-template">
+              <div class="seg-mini" role="group" aria-label="环境模板"><button type="button" data-template="standard">通用</button><button type="button" data-template="strict">严格</button></div>
+              <button id="env-target" class="pill-button" type="button"><span>调整目标</span></button>
+            </div>
+          </div>
+          <div class="env-row env-head" aria-hidden="true"><span>项目</span><span>当前</span><span>目标</span><span class="env-status">状态</span></div>
+          <div id="env-rows" class="env-rows"></div>
+        </article>
+        <article class="card env-card">
+          <div class="card-heading env-history-heading"><h2>更改记录与恢复</h2><small>修复前自动保存恢复点；请从最新一条开始恢复</small></div>
+          <div id="env-history-list" class="env-history"></div>
+        </article>
+        <p class="footnote">只改你确认过、能随时还原的设置：时区、国家或地区、区域格式、网卡 IPv6。显示语言需在系统设置里手动调整；TUN 和 Fake-IP 请在 <span class="client-name">Clash</span> 里开启。环境检查不改变守护逻辑，Claude 仍按固定出口实时验证。</p>
+      </section>
+
+      <!-- ========== 日志 ========== -->
+      <section id="logs" class="tab" hidden>
+        <div class="section-heading top">
+          <div><h1>最近的连接</h1><p id="log-state" class="subtle">等待内核记录</p></div>
+        </div>
+        <article class="card log-card">
+          <div class="log-row log-head" aria-hidden="true"><span>时间</span><span>主机</span><span>进程</span></div>
+          <div id="connection-list" class="connection-list"></div>
+        </article>
+        <p class="footnote">来自 <span class="client-core">Clash</span> 内核当前可见的 Claude 连接，最多显示 25 条；鼠标停在一行上可看完整进程路径和来源端口。</p>
+      </section>
+
+      <!-- ========== 设置 ========== -->
+      <section id="settings" class="tab" hidden>
+        <div class="section-heading top">
+          <div><h1>设置</h1></div>
+        </div>
+        <article class="card setting-card">
+          <div class="switch-row static"><span><strong>外观</strong><small>浅色为默认；深色适合夜间或暗光环境，标题栏按钮一起切换</small></span>
+            <div class="seg-mini theme-choice" id="theme-choice" role="radiogroup" aria-label="外观"><button type="button" role="radio" data-theme-value="light" aria-checked="true" class="active">浅色</button><button type="button" role="radio" data-theme-value="dark" aria-checked="false">深色</button></div></div>
+          <label class="switch-row"><span><strong>开机自动启动</strong><small>登录 Windows 后启动 ClaudeGuard。使用免安装 ZIP 时，开启后请不要再移动文件夹。</small></span><input id="login" type="checkbox" role="switch"></label>
+          <div class="switch-row static"><span><strong>打开窗口</strong><small>任意位置按快捷键，或点任务栏、通知区域的 Clawd 图标</small></span><kbd>Ctrl + Alt + Space</kbd></div>
+          <div class="switch-row static"><span><strong>关闭窗口</strong><small>只会最小化，守护继续运行；从通知区域菜单退出</small></span><span class="muted">最小化</span></div>
+        </article>
+        <p class="footnote">退出 ClaudeGuard 会关闭守护网关，已接入 <span class="client-name">Clash</span> 的 Claude 流量随之阻断。恢复原网络：Clash 还原接入前的原始脚本；v2rayN 删除 ClaudeGuard 的路由规则和网关节点。节点配置、生成的脚本和网关链接含本机凭据，请勿分享。设置和加密后的中转凭据保存在 %APPDATA%\GuardNook Share。</p>
+      </section>
+
+      <!-- ========== 配置：三步 ========== -->
+      <section id="setup" class="tab" hidden>
+        <div class="section-heading top">
+          <div><h1>配置固定出口</h1></div>
+          <button type="button" id="setup-back" class="pill-button"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg><span>返回守护</span></button>
+        </div>
+        <ol class="stepper" id="stepper">
+          <li data-step="1"><span>1</span><em id="stepper-1">识别 Clash</em></li>
+          <li data-step="2"><span>2</span><em id="stepper-2">入口与固定出口</em></li>
+          <li data-step="3"><span>3</span><em id="stepper-3">生成脚本并导入</em></li>
+        </ol>
+        <form id="setup-form" novalidate>
+          <fieldset class="wizard-step card" data-step="1">
+            <legend id="step1-title">识别本机 Clash</legend>
+            <div class="segmented" role="radiogroup" aria-label="代理客户端">
+              <label><input type="radio" name="client-kind" value="mihomo" checked><span><strong>Clash Verge / Mihomo</strong><small>Clash Verge Rev 或其他 Mihomo 客户端</small></span></label>
+              <label><input type="radio" name="client-kind" value="singbox"><span><strong>v2rayN（sing-box 内核）</strong><small>v2rayN 的内核需选 sing-box；Xray 内核暂不支持</small></span></label>
+            </div>
+            <p class="lead small" id="step1-lead">ClaudeGuard 只读取 Clash 的节点列表，不会改动你的订阅、全局节点或 Clash 设置。</p>
+            <div id="detect-box" class="detect-box" data-status="idle">
+              <span class="detect-dot" aria-hidden="true"></span>
+              <div class="detect-text">
+                <div class="detect-heading">
+                  <strong id="detect-title" aria-live="polite">还没有识别</strong>
+                  <span id="secret-help">
+                    <button id="secret-help-trigger" class="help-trigger" type="button" aria-label="在哪里找接口密钥" aria-describedby="secret-help-tip" aria-expanded="false">?</button>
+                    <span id="secret-help-tip" class="help-tip" role="tooltip" hidden>
+                      <span id="secret-help-clash" class="help-instructions">
+                        <strong>在 Clash Verge 里找接口密钥</strong>
+                        <span>设置 → Clash 设置 → 外部控制</span>
+                        <img src="assets/clash-verge-external-control.png" width="1330" height="1276" alt="截图中用红框标出了设置、Clash 设置和外部控制。">
+                      </span>
+                      <span id="secret-help-singbox" class="help-instructions" hidden>
+                        <strong>在 sing-box 配置里找接口密钥</strong>
+                        <span>打开 v2rayN 生成的 sing-box 配置，找到 clash_api 下的 secret。</span>
+                      </span>
+                      <span>复制「密钥」，粘贴到下方「接口密钥」。</span>
+                    </span>
+                  </span>
+                </div>
+                <small id="detect-detail" aria-live="polite">读取 Clash Verge 的配置，并探测 127.0.0.1:9097 和 9090。</small>
+              </div>
+              <button id="detect-clash" type="button" class="pill-button check-action"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><span>自动识别</span></button>
+            </div>
+            <div class="form-grid">
+              <label><span id="controller-label">Clash 控制接口</span><input id="controller-url" type="url" value="http://127.0.0.1:9097" required spellcheck="false"><small id="controller-hint">Clash 设置里的 external-controller，不是代理端口。</small></label>
+              <label>接口密钥<input id="controller-secret" type="password" autocomplete="off" maxlength="1024"><small id="secret-hint">未设置密钥可留空。</small></label>
+            </div>
+            <div class="step-footer">
+              <span id="node-count" class="muted">先启动 Clash Verge / Mihomo</span>
+              <button id="load-nodes" type="button" class="pill-button primary"><span>读取节点，下一步</span><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+            </div>
+          </fieldset>
+
+          <fieldset class="wizard-step card" data-step="2" hidden>
+            <legend id="step2-title">选择入口节点并填写固定出口</legend>
+            <div class="segmented" id="exit-mode-choice" role="radiogroup" aria-label="出口方式">
+              <label><input type="radio" name="exit-mode" value="relay" checked><span><strong>SOCKS5 中转（推荐）</strong><small>Clash 节点做入口，连到你自己的固定 SOCKS5 出口</small></span></label>
+              <label><input type="radio" name="exit-mode" value="existing"><span><strong>已有固定出口节点</strong><small>Clash 里的某个节点本身就是固定 IP</small></span></label>
+            </div>
+
+            <div id="relay-fields" class="relay-layout">
+              <div class="field-block">
+                <div class="field-head"><span class="field-label">入口节点（可多选）</span>
+                  <div class="seg-mini" role="group" aria-label="入口选择方式"><button type="button" data-entry="nodes" class="active">勾选节点</button><button type="button" data-entry="keyword">按关键词</button></div></div>
+                <div id="relay-node-picker" class="node-picker">
+                  <label class="node-select-all"><input id="relay-select-all" type="checkbox" disabled>全选</label>
+                  <div id="relay-node-list" class="node-list" role="group" aria-label="从 Clash 选择入口"></div>
+                </div>
+                <input id="relay-keyword" placeholder="节点名称包含的关键词，例如 香港" autocomplete="off" spellcheck="false" hidden>
+                <p id="relay-entry-hint" class="hint">多选的节点只是候选，都放进 Clash 的「入口选择」手动组，ClaudeGuard 不会自动切换：当前入口失效时 Claude 会被阻断，需要你在 Clash 里把「入口选择」切到另一个候选。</p>
+              </div>
+              <div class="field-block">
+                <div class="field-head"><span class="field-label">固定出口（SOCKS5）</span></div>
+                <label class="stack">粘贴 SOCKS5 链接<input id="relay-link" type="password" placeholder="socks5://用户名:密码@地址:端口" autocomplete="off" spellcheck="false"><small>链接中的特殊字符需要百分号编码；也可以直接填下面。</small></label>
+                <div class="relay-grid">
+                  <label class="wide">地址<input id="relay-host" autocomplete="off" spellcheck="false" placeholder="IPv4 或域名"></label>
+                  <label>端口<input id="relay-port" type="number" min="1" max="65535" placeholder="1080"></label>
+                  <label>账号<input id="relay-user" autocomplete="off" spellcheck="false" placeholder="必填"></label>
+                  <label>密码<input id="relay-password" type="password" autocomplete="new-password" placeholder="必填"></label>
+                </div>
+                <p id="relay-cred-hint" class="hint">账号和密码必须同时填写。本次保存会把凭据写入 Windows 加密存储。导入后 ClaudeGuard 会实测公网 IPv4，你确认后才启用保护。</p>
+              </div>
+            </div>
+
+            <div id="existing-fields" class="form-grid" hidden>
+              <label>Claude 使用的固定节点<select id="selected-proxy"><option value="">请先读取节点</option></select><small id="chain-hint">只列出具体节点，自动切换组不会出现。</small></label>
+              <label>唯一允许的出口 IPv4<input id="expected-input" placeholder="例如 203.0.113.1" autocomplete="off" spellcheck="false"><small>节点名里的国家不代表实际出口；动态 IP 可能无法持续通过。</small></label>
+            </div>
+
+            <div id="singbox-fields" class="form-grid" hidden>
+              <label>固定出口节点的别名<input id="sb-exit" list="sb-nodes" autocomplete="off" spellcheck="false" placeholder="与 v2rayN 里的别名一字不差"><datalist id="sb-nodes"></datalist><small id="sb-exit-hint">路由规则按别名找到这个节点。v2rayN 只列出正在使用的节点，没有时直接填写。</small></label>
+              <label>唯一允许的出口 IPv4<input id="sb-expected" placeholder="例如 203.0.113.1" autocomplete="off" spellcheck="false"><small>节点名里的国家不代表实际出口；动态 IP 可能无法持续通过。</small></label>
+              <label>v2rayN 本地端口<input id="sb-local-port" type="number" value="10808" min="1024" max="65535"><small>参数设置里的本地混合端口，用来检查 Claude 是否经过守护网关。</small></label>
+              <label>第二本地端口<input id="sb-second-port" type="number" value="10809" min="1024" max="65535"><small id="sb-second-hint">需在 v2rayN 开启第二个本地端口，通常为本地端口 + 1。守护网关经它连到固定出口。</small></label>
+            </div>
+
+            <div class="switch-list">
+              <label class="switch-row" id="device-wide-row"><span><strong>独立订阅走固定出口</strong><small>普通流量经 Pinned 固定出口，Claude 仍走独立守护通道；UDP 和 IPv6 会被阻断。已为 UU 远程单独放行直连</small></span><input id="device-wide" type="checkbox" role="switch" disabled></label>
+              <label class="switch-row"><span><strong id="tun-title">要求 Clash 开启 TUN 才放行</strong><small id="tun-hint">推荐。TUN 关闭时保持阻断。</small></span><input id="require-tun" type="checkbox" role="switch" checked></label>
+              <label class="switch-row" id="start-protected-row"><span><strong>应用启动时自动验证并启用保护</strong><small>与开机自启是两项独立设置</small></span><input id="start-protected" type="checkbox" role="switch"></label>
+            </div>
+            <details>
+              <summary id="advanced-title">高级：端口与原始扩展脚本</summary>
+              <div class="port-grid">
+                <label>面板端口<input id="server-port" type="number" value="19791" min="1024" max="65535" required></label>
+                <label class="clash-only">客户端端口<input id="client-port" type="number" value="19901" min="1024" max="65535" required></label>
+                <label class="clash-only">探测端口<input id="probe-port" type="number" value="19903" min="1024" max="65535" required></label>
+                <label>网关端口<input id="gateway-port" type="number" value="19904" min="1024" max="65535" required></label>
+              </div>
+              <div class="inline-row clash-only"><button id="pick-script" type="button" class="pill-button small"><span>选择原始 JS 脚本</span></button><span id="script-name" class="muted">没有原脚本时使用透传脚本</span></div>
+              <p class="hint clash-only">请选择接入 ClaudeGuard 之前的原始脚本，已有分流会保留。不要选择已生成的 ClaudeGuard 脚本。</p>
+            </details>
+            <div class="step-footer">
+              <button id="wiz-back-1" type="button" class="pill-button"><span>上一步</span></button>
+              <button class="pill-button primary" id="save-setup" type="submit"><span id="save-setup-label">保存并生成脚本</span><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+            </div>
+          </fieldset>
+
+          <fieldset class="wizard-step card" data-step="3" hidden>
+            <legend id="step3-title">把生成的脚本导入 Clash</legend>
+            <div id="verge-import" class="detect-box">
+              <div class="detect-text">
+                <strong>导入为独立订阅</strong>
+                <small>先从托盘退出 Clash Verge。导入后重新打开 Clash Verge，选中「ClaudeGuard（出口 IPv4）」并开启 TUN。</small>
+              </div>
+              <button id="import-verge" type="button" class="pill-button primary check-action"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-4-4 4 4 4-4M5 16v4h14v-4"/></svg><span>一键导入</span></button>
+            </div>
+            <div class="import-grid">
+              <ol class="howto" id="howto-clash">
+                <li><strong>复制生成的脚本</strong><small>含本机凭据，只供本机使用；复制 2 分钟后自动清空剪贴板。</small>
+                  <span class="inline-row"><button id="copy-script" type="button" class="pill-button primary small"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>复制脚本</span></button><button id="reveal-script" type="button" class="pill-button small"><span>在文件夹中显示</span></button></span></li>
+                <li><strong>粘贴到 Clash Verge 的全局扩展脚本</strong><small>订阅 → 全局扩展脚本 → 全选替换并保存，再重载配置。</small></li>
+                <li><strong>保持「规则」模式并开启 TUN</strong><small>Claude 由规则固定走「入口选择 → 固定出口」；首页的当前节点只影响其他应用。</small></li>
+                <li><strong id="howto-confirm">回到守护页确认实测 IPv4</strong><small id="howto-confirm-detail">右侧清单全部通过后，在守护页确认实测出口，保护随后开始连续验证。</small></li>
+              </ol>
+              <ol class="howto" id="howto-singbox" hidden>
+                <li><strong>导入守护网关节点</strong><small>复制后在 v2rayN 服务器列表按 <b>Ctrl+V</b>，新增 HTTP 节点 <b>GuardNookShare-Gateway</b>（<b>127.0.0.1:<span id="sb-gw-port">19904</span></b>）。不要设为活动服务器。链接含本机凭据，2 分钟后自动清空。</small>
+                  <span class="inline-row"><button id="copy-gw-link" type="button" class="pill-button primary small"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>复制网关节点链接</span></button><button id="copy-gw-password" type="button" class="pill-button small"><span>复制网关密码</span></button></span></li>
+                <li><strong>开启第二个本地端口</strong><small id="sb-second-step">v2rayN 参数设置里开启第二个本地监听端口，端口为 10809（本地端口 + 1）。</small></li>
+                <li><strong>导入路由规则并置顶</strong><small>路由设置 → 规则列表 → <b>从剪贴板中导入规则</b>，提示时选「是」追加（选「否」会替换全部规则）；再从最后一条 ClaudeGuard 规则起逐条「上移至顶」。</small>
+                  <span class="inline-row"><button id="copy-sb-rules" type="button" class="pill-button primary small"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>复制路由规则</span></button><button id="copy-sb-snippet" type="button" class="pill-button small"><span>复制 sing-box 片段</span></button></span></li>
+                <li><strong>内核选 sing-box 并开启 TUN</strong><small>Xray 内核不支持。TUN 开关后控制端口会变，ClaudeGuard 会自动重新找到。</small></li>
+                <li><strong>回到守护页启用保护</strong><small>右侧清单通过后，在守护页点「启用保护」；固定出口连续验证通过才放行。</small></li>
+              </ol>
+              <ul id="setup-checks" class="checks" aria-live="polite"></ul>
+            </div>
+            <p id="setup-result" class="hint">可以一键导入独立订阅，也可以按以上步骤手动导入。</p>
+            <div class="step-footer">
+              <button id="wiz-back-2" type="button" class="pill-button"><span>修改出口</span></button>
+              <button id="wiz-finish" type="button" class="pill-button primary"><span>完成，回到守护</span></button>
+            </div>
+          </fieldset>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="guard-help" class="guard-help" aria-labelledby="guard-help-title" aria-describedby="guard-help-detail">
+    <h2 id="guard-help-title"></h2>
+    <p id="guard-help-detail" class="lead small"></p>
+    <div class="guard-help-actions">
+      <button id="guard-help-close" type="button" class="pill-button">关闭</button>
+      <button id="guard-help-action" type="button" class="pill-button primary"></button>
+    </div>
+  </dialog>
+  <dialog id="env-dialog" class="env-dialog"><h2 id="env-dialog-title"></h2><p id="env-dialog-lead" class="lead small"></p><div id="env-plan" class="env-plan"></div><div class="env-dialog-foot"><p id="env-dialog-note" class="env-note"></p><button id="env-cancel" type="button" class="pill-button">取消</button><button id="env-confirm" type="button" class="pill-button primary"><span>确认修改</span></button></div></dialog>
+  <dialog id="env-target-dialog" class="env-dialog"><form id="env-target-form" novalidate><h2>调整检查目标</h2><p class="lead small">修复会把系统改成这些值。时区用 Windows 时区名，格式和语言用 en-US 这样的代码；国家留空表示不检查。</p>
+    <div class="env-target-grid">
+      <label>公网出口国家<input id="env-t-country" maxlength="2" placeholder="例如 US，留空不限" autocomplete="off" spellcheck="false"></label>
+      <label>系统国家或地区<input id="env-t-region" maxlength="2" placeholder="例如 US，留空不检查" autocomplete="off" spellcheck="false"></label>
+      <label class="wide">时区<input id="env-t-timezone" maxlength="64" placeholder="Pacific Standard Time" autocomplete="off" spellcheck="false"></label>
+      <label>区域格式<input id="env-t-culture" maxlength="35" placeholder="en-US" autocomplete="off" spellcheck="false"></label>
+      <label>显示语言<input id="env-t-language" maxlength="35" placeholder="en-US" autocomplete="off" spellcheck="false"></label>
+    </div>
+    <div class="env-dialog-foot"><p id="env-target-error" class="env-note error"></p><button id="env-target-cancel" type="button" class="pill-button">取消</button><button id="env-target-save" class="pill-button primary">保存并重新检查</button></div></form></dialog>
+</body>
+</html>

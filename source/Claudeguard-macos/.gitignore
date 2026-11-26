@@ -1,0 +1,23 @@
+# Build output and local tools
+.DS_Store
+.build/
+.swiftpm/
+__pycache__/
+node_modules/
+staged/
+dist/
+test-results/
+*.log
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+config.json
+auth.json
+state.json
+monitor.json
+prepared-Script.js
+*.pem
+*.p12
+*.key

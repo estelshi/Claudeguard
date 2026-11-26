@@ -1,0 +1,88 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { validateBaseline, reachability, stunVerdict, environmentTargets, inspectEnvironment } from './desktop-environment.mjs'
+import { protectedStatus } from './desktop-common.mjs'
+import { parseBinding } from './desktop-stun.mjs'
+import { mkdtemp, mkdir, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { readGuardConfig, atomicJSON } from './desktop-common.mjs'
+
+test('environment policy validates fields before any command interpolation', () => {
+  const value = { country: 'US', timezone: 'America/New_York', locale: 'en_US', language: 'en-US' }
+  assert.deepEqual(validateBaseline(value), value)
+  for (const key of Object.keys(value)) assert.throws(() => validateBaseline({ ...value, [key]: "'; touch /tmp/bad; '" }))
+})
+test('HTTP denial is distinguishable from connectivity and missing credentials', () => {
+  assert.equal(reachability([403, 401]).state, 'warn')
+  assert.match(reachability([200, 401]).detail, /未验证登录/)
+  assert.equal(reachability([0, 401]).state, 'fail')
+})
+test('STUN silence never becomes a zero-leak success', () => {
+  assert.equal(stunVerdict([], '203.0.113.1').state, 'unknown')
+  assert.equal(stunVerdict(['203.0.113.2'], '203.0.113.1').state, 'warn')
+  assert.equal(stunVerdict(['203.0.113.1'], null).state, 'unknown')
+  assert.equal(stunVerdict(['203.0.113.1'], '203.0.113.1').state, 'ok')
+})
+test('protected status requires an unexpired matching exit, TUN and open gateway', () => {
+  const config = { expectedIP: '203.0.113.1', requireTun: true }
+  const status = { state: 'protected', enabled: true, prepared: true, expectedIP: config.expectedIP,
+    last: { ip: config.expectedIP }, tunEnabled: true, gateway: { open: true, expiresAt: 110 } }
+  assert.equal(protectedStatus(status, config, 100), true)
+  assert.equal(protectedStatus(status, config, 111), false)
+  assert.equal(protectedStatus({ ...status, manual: true }, config, 100), false)
+  assert.equal(protectedStatus({ ...status, tunEnabled: false }, config, 100), false)
+  assert.equal(protectedStatus({ ...status, last: { ip: '203.0.113.2' } }, config, 100), false)
+})
+test('STUN parser validates transaction and packet boundaries before returning address', () => {
+  const transaction = Buffer.alloc(12, 7), packet = Buffer.alloc(32)
+  packet.writeUInt16BE(0x101, 0); packet.writeUInt16BE(12, 2); packet.writeUInt32BE(0x2112a442, 4)
+  transaction.copy(packet, 8); packet.writeUInt16BE(0x20, 20); packet.writeUInt16BE(8, 22); packet[25] = 1
+  const expected = [203, 0, 113, 1], mask = [0x21, 0x12, 0xa4, 0x42]
+  expected.forEach((value, i) => { packet[28 + i] = value ^ mask[i] })
+  assert.equal(parseBinding(packet, transaction), '203.0.113.1')
+  assert.equal(parseBinding(packet, Buffer.alloc(12)), null)
+  assert.equal(parseBinding(packet.subarray(0, 30), transaction), null)
+})
+test('the share configuration reader ignores a personal data directory', async t => {
+  const home = await mkdtemp(join(tmpdir(), 'guardnook-identity-'))
+  t.after(() => rm(home, { recursive: true, force: true }))
+  const root = join(home, 'Library/Application Support')
+  await mkdir(join(root, 'ClaudeGuard'), { recursive: true }); await mkdir(join(root, 'GuardNook'))
+  const original = { expectedIP: '203.0.113.1', proxyPassword: 'a'.repeat(64) }
+  await atomicJSON(join(root, 'ClaudeGuard/config.json'), original)
+  const portable = { ...original, serviceMode: 'existing', proxyPassword: '' }
+  await atomicJSON(join(root, 'GuardNook/config.json'), portable)
+  await assert.rejects(readGuardConfig(home), /明确连接/)
+})
+
+test('audit row targets stay explicit and never fall back to a blank dash', () => {
+  const policy = { country: 'US', timezone: 'America/New_York', locale: 'en_US', language: 'en-US' }
+  const targets = environmentTargets(policy, { expectedIP: '8.8.4.4', tunRequired: true })
+  assert.deepEqual(targets, {
+    kernel: '已连接本机控制接口',
+    tun: 'TUN 已开启',
+    country: 'US',
+    exit: '8.8.4.4',
+    timezone: 'America/New_York',
+    locale: 'en_US',
+    ipv6: '已关闭',
+    dns: 'Clash Fake-IP',
+    stun: 'UDP 不出网、零暴露',
+    guard: '保护通道有效',
+    rules: '规则已生效',
+    language: 'en-US',
+    asn: '仅供参考',
+    reach: '网页与 API 可达',
+  })
+  for (const [id, value] of Object.entries(targets)) {
+    assert.equal(typeof value, 'string', id)
+    assert.ok(value.trim() && value !== '—', id)
+  }
+  const relaxed = environmentTargets({ country: '', timezone: 'America/Puerto_Rico', locale: 'en_US', language: 'zh-Hans-CN' }, { tunRequired: false })
+  assert.equal(relaxed.country, '未限制国家')
+  assert.equal(relaxed.tun, '当前策略未强制')
+  assert.equal(relaxed.exit, '与守护目标一致')
+  assert.equal(environmentTargets(policy, { expectedIP: '203.0.113.8' }).exit, '与守护目标一致')
+  assert.equal(environmentTargets(policy, { expectedIP: '198.51.100.7' }).exit, '与守护目标一致')
+})
