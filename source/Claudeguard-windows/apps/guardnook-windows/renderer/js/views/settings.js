@@ -1,5 +1,5 @@
 'use strict'
-// 设置：外观（浅色 / 深色）、开机自启。
+// 设置：外观（浅色 / 深色）、UU 远程直连、开机自启。
 ;(() => {
   const GN = window.GN, { $ } = GN
 
@@ -22,6 +22,20 @@
       try { apply(await GN.call('setTheme', wanted)) }
       catch (error) { apply(before); GN.toast(error.message) }
     }))
+    const uu = $('uu-remote')
+    uu.checked = boot?.settings?.allowUURemote === true
+    uu.disabled = !boot?.settings?.relay
+    GN.on('uu-remote', 'change', async () => {
+      const wanted = uu.checked
+      uu.disabled = true
+      try {
+        const result = await GN.call('setUuRemote', wanted)
+        uu.checked = result.allowUURemote === true
+        if (result.settings) GN.store.settings = result.settings
+        if (result.needsReapply) GN.toast('已保存。请重新保存节点配置并一键导入，修改才会生效。')
+      } catch (error) { uu.checked = !wanted; throw error }
+      finally { uu.disabled = !GN.store.settings?.relay }
+    })
     GN.on('login', 'change', async () => {
       const box = $('login'), wanted = box.checked
       box.disabled = true

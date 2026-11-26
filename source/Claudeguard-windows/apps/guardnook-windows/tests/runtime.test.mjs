@@ -85,6 +85,11 @@ test('Windows SOCKS5 setup uses the vault, the common device policy, and a close
     assert.match(await readFile(reply.scriptPath, 'utf8'), /"deviceWide":true/)
     assert.equal(runtime.status().gateway.open, false)
     await assert.rejects(runtime.confirmRelay(), /实测/)
+    assert.equal(runtime.settings().allowUURemote, false)
+    const uu = await runtime.setAllowUURemote(true)
+    assert.equal(uu.needsReapply, true)
+    assert.equal(uu.settings.allowUURemote, true)
+    assert.equal(JSON.parse(await readFile(join(directory, 'config.json'), 'utf8')).allowUURemote, true)
   } finally {
     await runtime?.stop()
     controller.closeAllConnections()

@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { buildStandaloneProfile, installVergeProfile, parseYamlDocument, standaloneProfileName, standaloneStatus } from './verge-profile.mjs'
 import { deviceExitRules, uuRemoteExceptionRules } from './device-exit.mjs'
 import { desktopRoot } from './desktop-common.mjs'
+import { planProfileApply, setUURemote } from './setup.mjs'
 import { originalBackup, prepareDeviceVerge, restoreVergeScript, vergePaths } from './verge.mjs'
 
 const VERGE_RELATIVE = 'Library/Application Support/io.github.clash-verge-rev.clash-verge-rev'
@@ -171,10 +172,8 @@ test('生成的订阅只有四组，普通流量走固定出口', () => {
   ])
   assert.deepEqual(config.rules.slice(-deviceExitRules({ deviceWide: true, pinnedProxy: 'GuardNookShare-Pinned' }).length),
     deviceExitRules({ deviceWide: true, pinnedProxy: 'GuardNookShare-Pinned' }))
-  assert.ok(uuRemoteExceptionRules().every(rule => config.rules.includes(rule)))
-  assert.ok(config.rules.indexOf(uuRemoteExceptionRules()[0]) < config.rules.indexOf('NETWORK,UDP,REJECT'))
-  assert.equal(config['find-process-mode'], 'strict')
-  assert.notEqual(config.tun.stack, 'system')
+  // UU Remote is opt-in: by default nothing bypasses the pinned exit.
+  assert.ok(uuRemoteExceptionRules().every(rule => !config.rules.includes(rule)))
   assert.ok(!config.rules.includes('NETWORK,UDP,DIRECT'))
   assert.ok(!config.rules.includes('MATCH,入口选择'))
   assert.ok(!config.rules.some(rule => /追云加速|自动选择|子集组/.test(rule)))
@@ -337,7 +336,23 @@ test('不明确的 TUN 设置不再阻止生成仅保护 Claude 的独立订阅'
 })
 
 
-test('首次 profile-apply 会写入固定出口独立订阅并安排启动后连续验证', async t => {
+test('允许 UU 远程直连时，独立订阅把 UU 例外写在固定出口阻断之前', () => {
+  const { config } = buildStandaloneProfile(shareConfig({ allowUURemote: true }), { originalUid: 'orig1', credentials, originalText: ORIGIN })
+  const tail = deviceExitRules({ deviceWide: true, allowUURemote: true, pinnedProxy: 'GuardNookShare-Pinned' })
+  assert.deepEqual(config.rules.slice(-tail.length), tail)
+  assert.ok(uuRemoteExceptionRules().every(rule => config.rules.includes(rule)))
+  assert.ok(config.rules.indexOf(uuRemoteExceptionRules()[0]) < config.rules.indexOf('NETWORK,UDP,REJECT'))
+  assert.equal(config['find-process-mode'], 'strict')
+  assert.notEqual(config.tun.stack, 'system')
+})
+
+function runSetup(home, request) {
+  return spawnSync(process.execPath, [fileURLToPath(new URL('./setup.mjs', import.meta.url))], {
+    env: { ...process.env, HOME: home }, encoding: 'utf8', input: JSON.stringify(request),
+  })
+}
+
+test('首次 profile-apply 写入独立订阅，但中转保持待确认，直到第 4 步确认实测出口', async t => {
   const home = await fakeVerge()
   t.after(() => rm(home, { recursive: true, force: true }))
   const root = desktopRoot(home)
@@ -346,14 +361,14 @@ test('首次 profile-apply 会写入固定出口独立订阅并安排启动后�
   await mkdir(root, { recursive: true, mode: 0o700 })
   await writeFile(path, JSON.stringify({ ...base, startProtected: false, deviceWide: true,
     expectedIP: '203.0.113.1', relay: { ...base.relay, confirmed: false } }), { mode: 0o600 })
-  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./setup.mjs', import.meta.url))], {
-    env: { ...process.env, HOME: home }, encoding: 'utf8',
-    input: JSON.stringify({ operation: 'profile-apply', expectedIP: base.expectedIP, relayCredentials: credentials }),
-  })
+  const result = runSetup(home, { operation: 'profile-apply', expectedIP: base.expectedIP, relayCredentials: credentials })
   assert.equal(result.status, 0, result.stdout)
+  assert.equal(JSON.parse(result.stdout).relayConfirmed, false)
   const config = JSON.parse(await readFile(path, 'utf8'))
+  // The request's IPv4 only names the subscription; it is not trusted as the exit.
   assert.equal(config.expectedIP, base.expectedIP)
-  assert.equal(config.startProtected, true)
+  assert.equal(config.relay.confirmed, false)
+  assert.equal(config.startProtected, false)
   assert.equal(config.deviceWide, true)
   assert.equal(config.requireTun, true)
   assert.match(await readFile(vergePaths(home).settings, 'utf8'), /^enable_tun_mode: false$/m)
@@ -365,30 +380,95 @@ test('首次 profile-apply 会写入固定出口独立订阅并安排启动后�
   assert.doesNotMatch(generated, /MATCH,入口选择/)
   assert.doesNotMatch(generated, /NETWORK,UDP,DIRECT/)
   assert.doesNotMatch(generated, /追云加速|自动选择|子集组/)
+  assert.doesNotMatch(generated, /UURemote/)
 })
 
-
-test('已确认但仍是占位地址时，profile-apply 改用可用的中转 IPv4', async t => {
+test('未确认且没有可用 IPv4 时，profile-apply 不再拿中转地址充当已确认出口', async t => {
   const home = await fakeVerge()
   t.after(() => rm(home, { recursive: true, force: true }))
   const root = desktopRoot(home)
   const base = shareConfig()
   const path = join(root, 'config.json')
   await mkdir(root, { recursive: true, mode: 0o700 })
-  await writeFile(path, JSON.stringify({ ...base, startProtected: true, deviceWide: false,
+  const before = JSON.stringify({ ...base, startProtected: false, deviceWide: true,
+    expectedIP: '203.0.113.1', relay: { ...base.relay, confirmed: false } })
+  await writeFile(path, before, { mode: 0o600 })
+  const profiles = await readFile(vergePaths(home).profilesYaml, 'utf8')
+  const result = runSetup(home, { operation: 'profile-apply', expectedIP: '203.0.113.1', relayCredentials: credentials })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stdout, /第 4 步确认实测出口/)
+  assert.equal(await readFile(path, 'utf8'), before)
+  assert.equal(await readFile(vergePaths(home).profilesYaml, 'utf8'), profiles)
+})
+
+test('已确认但仍是占位地址时，profile-apply 不信任中转地址，退回待确认', async t => {
+  const home = await fakeVerge()
+  t.after(() => rm(home, { recursive: true, force: true }))
+  const root = desktopRoot(home)
+  const base = shareConfig()
+  const path = join(root, 'config.json')
+  await mkdir(root, { recursive: true, mode: 0o700 })
+  await writeFile(path, JSON.stringify({ ...base, startProtected: true, deviceWide: false, requireTun: false,
     expectedIP: '203.0.113.1', relay: { ...base.relay, confirmed: true } }), { mode: 0o600 })
-  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./setup.mjs', import.meta.url))], {
-    env: { ...process.env, HOME: home }, encoding: 'utf8',
-    input: JSON.stringify({ operation: 'profile-apply', expectedIP: '203.0.113.1', relayCredentials: credentials }),
-  })
+  const refused = runSetup(home, { operation: 'profile-apply', expectedIP: '203.0.113.1', relayCredentials: credentials })
+  assert.notEqual(refused.status, 0)
+  const result = runSetup(home, { operation: 'profile-apply', expectedIP: base.relay.host, relayCredentials: credentials })
   assert.equal(result.status, 0, result.stdout)
   const config = JSON.parse(await readFile(path, 'utf8'))
-  assert.equal(config.expectedIP, base.relay.host)
-  assert.notEqual(config.expectedIP, '203.0.113.1')
+  assert.equal(config.relay.confirmed, false)
+  assert.equal(config.startProtected, false)
   assert.equal(config.deviceWide, true)
-  const record = JSON.parse(await readFile(join(root, 'standalone.json'), 'utf8'))
-  assert.match(record.name, new RegExp(base.relay.host.replaceAll('.', '\\.')))
-  assert.doesNotMatch(record.name, /203\.0\.113\.1/)
+  assert.equal(config.requireTun, true)
+})
+
+test('已确认的旧配置 deviceWide/requireTun 为 false 时，profile-apply 会改写为 true', async t => {
+  const home = await fakeVerge()
+  t.after(() => rm(home, { recursive: true, force: true }))
+  const root = desktopRoot(home)
+  const base = shareConfig()
+  const path = join(root, 'config.json')
+  await mkdir(root, { recursive: true, mode: 0o700 })
+  await writeFile(path, JSON.stringify({ ...base, startProtected: true, deviceWide: false, requireTun: false,
+    allowUURemote: true, relay: { ...base.relay, confirmed: true } }), { mode: 0o600 })
+  const result = runSetup(home, { operation: 'profile-apply', relayCredentials: credentials })
+  assert.equal(result.status, 0, result.stdout)
+  assert.equal(JSON.parse(result.stdout).relayConfirmed, true)
+  const config = JSON.parse(await readFile(path, 'utf8'))
+  assert.equal(config.deviceWide, true)
+  assert.equal(config.requireTun, true)
+  assert.equal(config.startProtected, true)
+  assert.equal(config.expectedIP, base.expectedIP)
+  assert.equal(config.relay.confirmed, true)
+  assert.equal(config.allowUURemote, true)
+})
+
+test('planProfileApply 只在缺少整机/TUN/确认等字段时改写配置', () => {
+  const base = shareConfig()
+  const stale = planProfileApply({ ...base, deviceWide: false, requireTun: false }, '')
+  assert.equal(stale.persist, true)
+  assert.equal(stale.active.deviceWide, true)
+  assert.equal(stale.active.requireTun, true)
+  const current = planProfileApply(base, '')
+  assert.equal(current.persist, false)
+  assert.equal(current.active.expectedIP, base.expectedIP)
+})
+
+test('set-uu-remote 保存开关并提示需要重新应用配置', async t => {
+  const home = await fakeVerge()
+  t.after(() => rm(home, { recursive: true, force: true }))
+  const root = desktopRoot(home)
+  const path = join(root, 'config.json')
+  await mkdir(root, { recursive: true, mode: 0o700 })
+  await writeFile(path, JSON.stringify(shareConfig()), { mode: 0o600 })
+  const on = await setUURemote(root, { allowUURemote: true })
+  assert.deepEqual(on, { saved: true, allowUURemote: true, needsReapply: true })
+  assert.equal(JSON.parse(await readFile(path, 'utf8')).allowUURemote, true)
+  assert.equal((await setUURemote(root, { allowUURemote: true })).needsReapply, false)
+  await assert.rejects(setUURemote(root, { allowUURemote: 'yes' }), /设置无效/)
+  const off = runSetup(home, { operation: 'set-uu-remote', allowUURemote: false })
+  assert.equal(off.status, 0, off.stdout)
+  assert.equal(JSON.parse(off.stdout).needsReapply, true)
+  assert.equal(JSON.parse(await readFile(path, 'utf8')).allowUURemote, false)
 })
 
 test('缺少密码时不写出无认证的独立订阅', async t => {
@@ -452,9 +532,7 @@ test('原订阅规则不会留下对已删除分组的引用，结尾必须是�
   ])
   assert.deepEqual(config.rules.slice(-deviceExitRules({ deviceWide: true, pinnedProxy: 'GuardNookShare-Pinned' }).length),
     deviceExitRules({ deviceWide: true, pinnedProxy: 'GuardNookShare-Pinned' }))
-  assert.ok(uuRemoteExceptionRules().every(rule => config.rules.includes(rule)))
-  assert.ok(config.rules.indexOf(uuRemoteExceptionRules()[0]) < config.rules.indexOf('NETWORK,UDP,REJECT'))
-  assert.equal(config['find-process-mode'], 'strict')
+  assert.ok(uuRemoteExceptionRules().every(rule => !config.rules.includes(rule)))
   assert.ok(!config.rules.some(rule => /追云加速|自动选择|子集组/.test(rule)))
   assert.ok(!config.rules.includes('MATCH,入口选择'))
   assert.ok(!config.rules.includes('NETWORK,UDP,DIRECT'))

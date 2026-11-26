@@ -19,7 +19,7 @@ import { installVergeProfile, standaloneStatus } from './verge-profile.mjs'
 import { isSingboxVersion, singboxCatalogue, singboxSnippet, v2raynRules, gatewayNode } from './singbox.mjs'
 
 export const PORTABLE_DEFAULTS = Object.freeze({
-  targetPlatform: 'darwin', requireTun: false, guardGoogleAuth: true, clientID: 'verge',
+  targetPlatform: 'darwin', requireTun: false, guardGoogleAuth: true, clientID: 'verge', allowUURemote: false,
   controllerSocket: DEFAULT_CONFIG.controllerSocket, controllerURL: '', controllerSecret: '',
   expectedIP: '', selectedProxy: '', upstreamChain: [],
   ...SHARE_IDENTITY,
@@ -298,7 +298,10 @@ export async function saveRelay(root, input, readCatalogue = catalogue) {
   const original = typeof input.originalScript === 'string' && input.originalScript.trim()
     ? input.originalScript : 'function main(config) { return config; }'
   if (original.length > 2 * 1024 * 1024) throw new Error('原始扩展脚本太大。')
-  const config = validateShareConfig({ ...base, coverageVersion: 1, relay, deviceWide: input.deviceWide === true, requireTun: input.deviceWide === true || base.requireTun })
+  // The UU Remote exception is a user preference: keep it across re-saves unless
+  // the request sets it explicitly.
+  const allowUURemote = typeof input.allowUURemote === 'boolean' ? input.allowUURemote : prior?.allowUURemote === true
+  const config = validateShareConfig({ ...base, coverageVersion: 1, relay, allowUURemote, deviceWide: input.deviceWide === true, requireTun: input.deviceWide === true || base.requireTun })
   const result = await saveGenerated(root, original, config, { username: exit.username, password: exit.password })
   return { ...result, expectedIP: null, relayID: relay.id }
 }
@@ -360,6 +363,7 @@ function scriptMatchesConfig(script, config) {
   if (!options) return !config.deviceWide
   const relay = config.relay || {}, embedded = options.relay || {}
   if (Boolean(options.deviceWide) !== config.deviceWide) return false
+  if (Boolean(options.allowUURemote) !== (config.allowUURemote === true)) return false
   if (options.expectedIP !== config.expectedIP) return false
   if (options.policyGroup !== config.policyGroup || options.pinnedProxy !== config.pinnedProxy) return false
   if (embedded.id !== relay.id || embedded.host !== relay.host || embedded.port !== relay.port) return false
@@ -392,6 +396,46 @@ async function vergeReport(home, loaded) {
   return { version: state.version, scriptPath: state.script, scriptExists: state.scriptExists,
     scriptSize: state.scriptSize, scriptSHA256: state.scriptSHA256, currentProfile: state.currentProfile,
     backupPath: await originalBackup(home), ...loaded }
+}
+// Decide the standalone-profile configuration for 「应用配置」 and whether the
+// saved config.json has to be rewritten.
+//
+// Only a relay confirmed through confirm-relay (a fresh measured exit) is
+// trusted. A relay that is not confirmed yet cannot be measured before the
+// GuardNook groups exist, so the first apply installs the profile with the
+// relay still unconfirmed: the request's IPv4 only labels the subscription and
+// is never trusted. The guard then stays in observe with
+// relay-awaiting-confirmation (gate closed) until step 4 confirms the measured
+// IPv4. The relay host is never used as a fallback.
+export function planProfileApply(config, inputExpectedIP) {
+  if (!config?.relay) throw new Error('请先保存 SOCKS5 中转配置。')
+  const confirmed = config.relay.confirmed === true && isUsableExpectedIP(config.expectedIP)
+  const expectedIP = confirmed ? config.expectedIP : (isUsableExpectedIP(inputExpectedIP) ? inputExpectedIP : '')
+  if (!expectedIP) throw new Error('中转出口还未确认：请填写 SOCKS5 的公网 IPv4 作为临时订阅名称，应用后在第 4 步确认实测出口。')
+  const active = validateShareConfig({ ...config, expectedIP, selectedProxy: relayExit, coverageVersion: 1,
+    deviceWide: true, requireTun: true, startProtected: confirmed, relay: { ...config.relay, confirmed } })
+  // Since 0e263a7 the standalone profile is device-wide with TUN required again;
+  // a config saved without them (e.g. by 391eea5) is corrected here.
+  const persist = config.relay.confirmed !== confirmed || config.expectedIP !== expectedIP
+    || !config.deviceWide || !config.requireTun || config.startProtected !== confirmed
+    || config.selectedProxy !== active.selectedProxy || config.coverageVersion !== active.coverageVersion
+  return { active, persist }
+}
+export async function setUURemote(root, input) {
+  if (typeof input?.allowUURemote !== 'boolean') throw new Error('UU 远程直连设置无效。')
+  const file = join(root, 'config.json')
+  let config
+  try { config = validateShareConfig(JSON.parse(await readFile(file, 'utf8'))) }
+  catch (error) {
+    if (error.code === 'ENOENT') throw new Error('请先完成固定出口配置。')
+    throw new Error('已有配置不可读，未修改。')
+  }
+  const changed = (config.allowUURemote === true) !== input.allowUURemote
+  if (changed) await atomicPrivate(file, JSON.stringify(validateShareConfig({ ...config, allowUURemote: input.allowUURemote }), null, 2))
+  // The rules live in the standalone profile / generated script, so a change only
+  // takes effect after 应用配置 regenerates it. Until then the guard keeps
+  // failing closed if the loaded rules do not match.
+  return { saved: true, allowUURemote: input.allowUURemote, needsReapply: changed && Boolean(config.relay) }
 }
 async function command() {
   let text = ''
@@ -439,21 +483,13 @@ async function command() {
   if (input.operation === 'profile-apply') {
     const home = homedir(), root = desktopRoot(home)
     const config = await shareConfig(root)
-    if (!config?.relay) throw new Error('请先保存 SOCKS5 中转配置。')
-    // A fresh relay cannot be measured before the GuardNook groups exist, so the
-    // first apply trusts the relay's own IP and the guard verifies the real exit
-    // after Clash restarts. Later applies keep the confirmed value.
-    const confirmed = config.relay.confirmed === true
-    const expectedIP = isUsableExpectedIP(confirmed ? config.expectedIP : '')
-      ? config.expectedIP
-      : (isUsableExpectedIP(input.expectedIP) ? input.expectedIP
-        : (isUsableExpectedIP(config.relay.host) ? config.relay.host : ''))
-    if (!isUsableExpectedIP(expectedIP)) throw new Error('请先保存有效的固定出口 IPv4。')
-    const active = validateShareConfig({ ...config, expectedIP, selectedProxy: relayExit, coverageVersion: 1, deviceWide: true, requireTun: true, startProtected: true, relay: { ...config.relay, confirmed: true } })
+    const { active, persist } = planProfileApply(config, input.expectedIP)
     const result = await installVergeProfile({ home, config: active, credentials: input.relayCredentials })
-    if (!confirmed || config.deviceWide || !config.startProtected || config.expectedIP !== expectedIP) await atomicPrivate(join(root, 'config.json'), JSON.stringify(active, null, 2))
-    return { verge: { ...await vergeReport(home, { loaded: false, reason: 'reload-required' }), ...result } }
+    if (persist) await atomicPrivate(join(root, 'config.json'), JSON.stringify(active, null, 2))
+    return { verge: { ...await vergeReport(home, { loaded: false, reason: 'reload-required' }), ...result },
+      relayConfirmed: active.relay.confirmed === true }
   }
+  if (input.operation === 'set-uu-remote') return setUURemote(desktopRoot(), input)
   if (input.operation === 'verge-apply') {
     const home = homedir(), root = desktopRoot(home)
     const scriptText = await refreshGeneratedScript(root, input.relayCredentials)

@@ -43,6 +43,8 @@ struct SetupReply: Decodable, Sendable {
     var planToken: String?
     var note: String?
     var verge: SetupVerge?
+    var allowUURemote: Bool?
+    var needsReapply: Bool?
 }
 struct SetupVerge: Decodable, Sendable {
     struct Profile: Decodable, Sendable {
@@ -747,9 +749,10 @@ final class GuardSetupModel: ObservableObject {
         }
         var request: [String: Any] = ["operation": "profile-apply"]
         do {
-            // A new relay cannot be measured before its GuardNook groups exist, so the
-            // first apply trusts the relay address and verifies the real exit after the
-            // restart. Later applies keep the previously confirmed exit.
+            // A new relay cannot be measured before its GuardNook groups exist. The
+            // relay address only names the first subscription: the relay stays
+            // unconfirmed (gate closed) until step 4 confirms the measured exit.
+            // Later applies keep the previously confirmed exit.
             if GuardSettings.current?.relay?.confirmed != true {
                 let host = GuardSettings.current?.relay?.host.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 let parts = host.split(separator: ".", omittingEmptySubsequences: false)

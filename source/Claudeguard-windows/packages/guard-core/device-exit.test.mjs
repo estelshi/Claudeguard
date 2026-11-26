@@ -36,13 +36,13 @@ function tunConfigs(extra = {}) {
 }
 
 test('verifyDeviceExit accepts live Mihomo payloads for the UU and pinned tail', () => {
-  const config = { deviceWide: true, pinnedProxy: 'GuardNookShare-Pinned' }
+  const config = { deviceWide: true, allowUURemote: true, pinnedProxy: 'GuardNookShare-Pinned' }
   const rules = { rules: liveMihomoDeviceTail(config) }
   assert.doesNotThrow(() => verifyDeviceExit(tunConfigs(), rules, config, 0))
 })
 
 test('verifyDeviceExit still requires UU DIRECT exceptions and the pinned reject tail', () => {
-  const config = { deviceWide: true, pinnedProxy: 'GuardNookShare-Pinned' }
+  const config = { deviceWide: true, allowUURemote: true, pinnedProxy: 'GuardNookShare-Pinned' }
   const live = liveMihomoDeviceTail(config)
   const tun = tunConfigs()
   const missingUu = { rules: live.filter(rule => rule.type !== 'ProcessName' && rule.type !== 'ProcessPathRegex') }
@@ -56,7 +56,7 @@ test('verifyDeviceExit still requires UU DIRECT exceptions and the pinned reject
 })
 
 test('verifyDeviceExit still accepts the generated IPCIDR6 form of the IPv6 reject', () => {
-  const config = { deviceWide: true, pinnedProxy: 'pinned' }
+  const config = { deviceWide: true, allowUURemote: true, pinnedProxy: 'pinned' }
   const rules = { rules: deviceExitRules(config).map(text => {
     if (text.startsWith('PROCESS-NAME,')) {
       const rest = text.slice('PROCESS-NAME,'.length)
@@ -74,4 +74,36 @@ test('verifyDeviceExit still accepts the generated IPCIDR6 form of the IPv6 reje
     throw new Error(text)
   }) }
   assert.doesNotThrow(() => verifyDeviceExit(tunConfigs(), rules, config, 0))
+})
+
+const pinnedTail = c => [
+  { type: 'Network', payload: 'udp', proxy: 'REJECT' },
+  { type: 'IPCIDR', payload: '::/0', proxy: 'REJECT' },
+  { type: 'Match', payload: '', proxy: c.pinnedProxy },
+]
+
+test('UU Remote exception is off by default: only the 3-rule pinned tail', () => {
+  const config = { deviceWide: true, pinnedProxy: 'GuardNookShare-Pinned' }
+  assert.deepEqual(deviceExitRules(config), ['NETWORK,UDP,REJECT', 'IP-CIDR6,::/0,REJECT,no-resolve', 'MATCH,GuardNookShare-Pinned'])
+  assert.deepEqual(deviceExitRules({ ...config, allowUURemote: false }), deviceExitRules(config))
+  // No process matching is required when there are no PROCESS-* rules.
+  const tun = tunConfigs({ 'find-process-mode': 'off' })
+  assert.doesNotThrow(() => verifyDeviceExit(tun, { rules: pinnedTail(config) }, config, 0))
+})
+
+test('allowUURemote puts the UU DIRECT rules first, before the pinned tail', () => {
+  const config = { deviceWide: true, allowUURemote: true, pinnedProxy: 'GuardNookShare-Pinned' }
+  const rules = deviceExitRules(config)
+  assert.deepEqual(rules.slice(0, uuRemoteExceptionRules().length), uuRemoteExceptionRules())
+  assert.deepEqual(rules.slice(-3), ['NETWORK,UDP,REJECT', 'IP-CIDR6,::/0,REJECT,no-resolve', 'MATCH,GuardNookShare-Pinned'])
+  assert.throws(() => verifyDeviceExit(tunConfigs({ 'find-process-mode': 'off' }), { rules: liveMihomoDeviceTail(config) }, config, 0), /device-process-mode/)
+})
+
+test('verifyDeviceExit fails when loaded UU rules do not match allowUURemote', () => {
+  const off = { deviceWide: true, allowUURemote: false, pinnedProxy: 'GuardNookShare-Pinned' }
+  const on = { ...off, allowUURemote: true }
+  // UU rules loaded but the flag is off.
+  assert.throws(() => verifyDeviceExit(tunConfigs(), { rules: liveMihomoDeviceTail(off) }, off, 0), /device-rules-required/)
+  // Flag on but only the 3-rule tail is loaded.
+  assert.throws(() => verifyDeviceExit(tunConfigs(), { rules: pinnedTail(on) }, on, 0), /device-rules-required/)
 })

@@ -12,6 +12,9 @@ struct GuardSettingsPage: View {
     @ObservedObject private var loginItem = GuardLoginItem.shared
     @State private var showsMenuBarClawd = UserDefaults.standard.object(forKey: guardMenuBarClawdKey) as? Bool ?? true
     @State private var showingMaintenance = false
+    @State private var allowUURemote = GuardSettings.current?.allowUURemote ?? false
+    @State private var uuRemoteBusy = false
+    @State private var uuRemoteNote: String?
 
     var body: some View {
         Group {
@@ -43,6 +46,18 @@ struct GuardSettingsPage: View {
                     Button(GuardSettings.current == nil ? "开始配置" : "修改配置") { GuardSetupWindow.show() }
                         .buttonStyle(GuardPillButtonStyle())
                         .accessibilityIdentifier("guard.settings.setup")
+                }
+                divider
+                row(title: "允许 UU 远程直连", detail: uuRemoteNote ?? uuRemoteDetail) {
+                    Toggle("允许 UU 远程直连", isOn: Binding(
+                        get: { allowUURemote },
+                        set: { setUURemote($0) }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(uuRemoteBusy || GuardSettings.current?.relay == nil)
+                    .accessibilityIdentifier("guard.settings.uuRemote")
                 }
                 divider
                 row(title: "维护与恢复", detail: "解除 Clash 接入、诊断包、手动更新与环境恢复") {
@@ -158,6 +173,37 @@ struct GuardSettingsPage: View {
         return loginItem.status == .requiresApproval
             ? "请在系统设置的「登录项」中允许 ClaudeGuard 启动"
             : "登录 macOS 后自动启动 ClaudeGuard"
+    }
+
+    private var uuRemoteDetail: String {
+        "仅 UU 远程进程绕过固定出口，Claude 不受影响。修改后需重新应用配置。"
+    }
+
+    /// Saves the preference through setup.mjs. The rules live in the standalone
+    /// profile, so the change only takes effect after 应用配置 regenerates it.
+    @MainActor private func setUURemote(_ wanted: Bool) {
+        guard !uuRemoteBusy, wanted != allowUURemote else { return }
+        let before = allowUURemote
+        allowUURemote = wanted
+        uuRemoteBusy = true
+        uuRemoteNote = nil
+        Task {
+            do {
+                let reply = try await Task.detached {
+                    try GuardRuntime.helper(["operation": "set-uu-remote", "allowUURemote": wanted])
+                }.value
+                allowUURemote = reply.allowUURemote ?? wanted
+                if reply.needsReapply == true {
+                    uuRemoteNote = "已保存。请在「修改配置」里重新应用配置后生效。"
+                }
+                GuardLogModel.shared.record(.configuration, .success, wanted ? "已允许 UU 远程直连" : "已关闭 UU 远程直连")
+            } catch {
+                allowUURemote = before
+                uuRemoteNote = error.localizedDescription
+                GuardLogModel.shared.record(.configuration, .error, "UU 远程直连设置未保存", detail: error.localizedDescription)
+            }
+            uuRemoteBusy = false
+        }
     }
 
     private var startupDetail: String {

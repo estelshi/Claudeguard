@@ -63,7 +63,7 @@ struct GuardSetupView: View {
             Button("生成并重启 Clash") { Task { await model.applyDeviceExit() } }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("会新建「GuardNook：出口 IP」独立订阅并设为当前订阅，原订阅保留在列表里。入口组包含上一步选中的全部入口节点。ClaudeGuard 会开启 Clash TUN 并重启 Clash，然后实测系统和 Claude 的出口。接管后的公网 TCP 使用固定 IPv4，UDP 会被阻断；UU 远程会单独直连放行。")
+            Text("会新建「GuardNook：出口 IP」独立订阅并设为当前订阅，原订阅保留在列表里。入口组包含上一步选中的全部入口节点。ClaudeGuard 会开启 Clash TUN 并重启 Clash，然后实测系统和 Claude 的出口。接管后的公网 TCP 使用固定 IPv4，UDP 会被阻断；UU 远程直连需在「设置」中开启。")
         }
         .task {
             if openExitSettings, model.relayID != nil {
@@ -577,7 +577,7 @@ struct GuardSetupView: View {
                 Rectangle().fill(GuardInk.hairline).frame(height: 1)
                 VStack(alignment: .leading, spacing: 10) {
                     if model.relayMode {
-                        Text("独立订阅会把普通流量也送到固定出口；Claude 仍走独立守护通道。UDP 和 IPv6 会被阻断。已为 UU 远程单独放行直连，其他依赖 UDP 的应用仍可能受影响。")
+                        Text("独立订阅会把普通流量也送到固定出口；Claude 仍走独立守护通道。UDP 和 IPv6 会被阻断。UU 远程直连可在「设置」中开启，其他依赖 UDP 的应用仍可能受影响。")
                             .font(GuardFont.meta)
                             .foregroundStyle(GuardInk.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
