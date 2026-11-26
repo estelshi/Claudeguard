@@ -41,65 +41,70 @@ struct GuardSettingsPage: View {
         VStack(alignment: .leading, spacing: 0) {
             GuardPageHeader(title: "设置", subtitle: "守护在后台持续运行，收起面板不影响保护")
             Spacer().frame(height: GuardMetrics.section)
-            VStack(spacing: 0) {
-                row(title: "固定出口", detail: exitSummary) {
-                    Button(GuardSettings.current == nil ? "开始配置" : "修改配置") { GuardSetupWindow.show() }
-                        .buttonStyle(GuardPillButtonStyle())
-                        .accessibilityIdentifier("guard.settings.setup")
-                }
-                divider
-                row(title: "允许 UU 远程直连", detail: uuRemoteNote ?? uuRemoteDetail) {
-                    Toggle("允许 UU 远程直连", isOn: Binding(
-                        get: { allowUURemote },
-                        set: { setUURemote($0) }
-                    ))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .disabled(uuRemoteBusy || GuardSettings.current?.relay == nil)
-                    .accessibilityIdentifier("guard.settings.uuRemote")
-                }
-                divider
-                row(title: "维护与恢复", detail: "解除 Clash 接入、诊断包、手动更新与环境恢复") {
-                    Button("打开") { showingMaintenance = true }
-                        .buttonStyle(GuardPillButtonStyle())
-                        .accessibilityIdentifier("guard.settings.maintenance")
-                }
-            }
-            .padding(.horizontal, 16)
-            .guardCard()
-            Spacer().frame(height: GuardMetrics.gap)
-            VStack(spacing: 0) {
-                row(title: "登录时启动", detail: loginDetail) {
-                    if loginItem.status == .requiresApproval {
-                        Button("打开登录项") { SMAppService.openSystemSettingsLoginItems() }
-                            .buttonStyle(GuardPillButtonStyle())
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(spacing: 0) {
+                        row(title: "固定出口", detail: exitSummary) {
+                            Button(GuardSettings.current == nil ? "开始配置" : "修改配置") { GuardSetupWindow.show() }
+                                .buttonStyle(GuardPillButtonStyle())
+                                .accessibilityIdentifier("guard.settings.setup")
+                        }
+                        divider
+                        row(title: "允许 UU 远程直连", detail: uuRemoteNote ?? uuRemoteDetail) {
+                            Toggle("允许 UU 远程直连", isOn: Binding(
+                                get: { allowUURemote },
+                                set: { setUURemote($0) }
+                            ))
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .disabled(uuRemoteBusy || GuardSettings.current?.relay == nil)
+                            .accessibilityIdentifier("guard.settings.uuRemote")
+                        }
+                        divider
+                        row(title: "维护与恢复", detail: "解除 Clash 接入、诊断包、手动更新与环境恢复") {
+                            Button("打开") { showingMaintenance = true }
+                                .buttonStyle(GuardPillButtonStyle())
+                                .accessibilityIdentifier("guard.settings.maintenance")
+                        }
                     }
-                    Toggle("登录时启动", isOn: Binding(
-                        get: { loginItem.isEnabled },
-                        set: { loginItem.setEnabled($0) }
-                    ))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                    .padding(.horizontal, 16)
+                    .guardCard()
+                    Spacer().frame(height: GuardMetrics.gap)
+                    VStack(spacing: 0) {
+                        row(title: "登录时启动", detail: loginDetail) {
+                            if loginItem.status == .requiresApproval {
+                                Button("打开登录项") { SMAppService.openSystemSettingsLoginItems() }
+                                    .buttonStyle(GuardPillButtonStyle())
+                            }
+                            Toggle("登录时启动", isOn: Binding(
+                                get: { loginItem.isEnabled },
+                                set: { loginItem.setEnabled($0) }
+                            ))
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                        }
+                        divider
+                        row(title: "启动时自动验证并启用保护", detail: startupDetail) {
+                            Text(GuardSettings.current?.startProtected == true ? "已开启" : "未开启")
+                                .font(GuardFont.meta)
+                                .foregroundStyle(GuardInk.tertiary)
+                        }
+                        divider
+                        row(title: "菜单栏显示 Clawd", detail: "面板收起时，在菜单栏看守护状态") {
+                            Toggle("菜单栏显示 Clawd", isOn: $showsMenuBarClawd)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .controlSize(.small)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .guardCard()
                 }
-                divider
-                row(title: "启动时自动验证并启用保护", detail: startupDetail) {
-                    Text(GuardSettings.current?.startProtected == true ? "已开启" : "未开启")
-                        .font(GuardFont.meta)
-                        .foregroundStyle(GuardInk.tertiary)
-                }
-                divider
-                row(title: "菜单栏显示 Clawd", detail: "面板收起时，在菜单栏看守护状态") {
-                    Toggle("菜单栏显示 Clawd", isOn: $showsMenuBarClawd)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 16)
-            .guardCard()
-            Spacer(minLength: 0)
+            .frame(maxHeight: .infinity)
         }
     }
 

@@ -8,12 +8,12 @@
 
 一个跑在本机的小守护：校验你的代理客户端规则和真实出口 IP，全部对上才放行 Claude 的流量；任何一项对不上就阻断，不回退、不偷偷换线路。
 
-1.0.0 · macOS 15+ · Clash Verge Rev / Mihomo
+1.0.3 · macOS 15+ · Clash Verge Rev / Mihomo
 
 </div>
 
 > [!WARNING]
-> 1.0.0 已完成 Universal 编译和打包。真实公网固定出口和系统 TUN 联动仍待验证。
+> 1.0.3 已完成 Universal 编译和打包。安装包为临时签名、未经 Apple 公证。真实公网固定出口和系统 TUN 联动仍待验证。
 
 ---
 
@@ -61,7 +61,7 @@ ClaudeGuard 不提供节点、订阅或线路。你需要自己有一个固定 I
 
 ## 下载与安装
 
-macOS 安装包正在重新打包，暂未提供下载。这不是正式稳定版，不建议在生产环境依赖。也可在本平台源码目录本地构建，产物位于 `dist/`。总览见[仓库首页](../../README.md)。
+安装包已作为 **v1.0.3 预发布测试版** 发布，见 [GitHub Release](https://github.com/estelshi/Claudeguard/releases/tag/v1.0.3)，可下载 [DMG](https://github.com/estelshi/Claudeguard/releases/download/v1.0.3/ClaudeGuard-1.0.3-macos-universal.dmg) 或 [应用 ZIP](https://github.com/estelshi/Claudeguard/releases/download/v1.0.3/ClaudeGuard-1.0.3-macos-universal.zip)。可用 [SHA256SUMS.txt](https://github.com/estelshi/Claudeguard/releases/download/v1.0.3/SHA256SUMS.txt) 核对完整性。这不是正式稳定版，不建议在生产环境依赖。安装包为临时（ad-hoc）签名，未经 Apple 公证。也可在本平台源码目录本地构建，产物位于 `dist/`。总览见[仓库首页](../../README.md)。
 
 适用于 macOS 15+，支持 Apple Silicon 和 Intel。打开 DMG，将 `ClaudeGuard.app` 拖入「应用程序」。安装包未公证。接入和恢复说明见 [macOS 使用指南](apps/guardnook/README.md)。
 

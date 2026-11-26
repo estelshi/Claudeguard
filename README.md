@@ -10,12 +10,12 @@ https://github.com/user-attachments/assets/ff98a99d-b422-4894-bd38-761bef43be18
 
 一个跑在本机的小守护：校验你的代理客户端规则和真实出口 IP，全部对上才放行 Claude 的流量；任何一项对不上就阻断，不回退、不偷偷换线路。
 
-macOS 1.0.0 · Windows 1.0.2 · macOS 15+ · Windows 10 / 11 x64 · Clash Verge Rev / Mihomo · Windows 另有实验性 v2rayN（sing-box 内核）
+macOS 1.0.3 · Windows 1.0.3 · macOS 15+ · Windows 10 / 11 x64 · Clash Verge Rev / Mihomo · Windows 另有实验性 v2rayN（sing-box 内核）
 
 </div>
 
 > [!WARNING]
-> Windows 1.0.2 和 macOS 1.0.0 都是预发布测试版，**不建议在生产环境依赖**。已提供 macOS Universal 安装包（临时签名、未经 Apple 公证）和 Windows x64 安装包（未签名，尚未在真实 Windows 设备上完整验收）。真实公网固定出口、系统 TUN 和应用联动仍待验证。
+> Windows 1.0.3 和 macOS 1.0.3 都是预发布测试版，**不建议在生产环境依赖**。已提供 macOS Universal 安装包（临时签名、未经 Apple 公证）和 Windows x64 安装包（未签名，尚未在真实 Windows 设备上完整验收）。真实公网固定出口、系统 TUN 和应用联动仍待验证。
 
 ---
 
@@ -67,12 +67,12 @@ macOS 应用不提供 v2rayN 接入界面。使用说明见 [macOS README](sourc
 
 ## 下载与安装
 
-Windows 安装包为 **v1.0.2 预发布测试版**，见 [v1.0.2 Release](https://github.com/estelshi/Claudeguard/releases/tag/v1.0.2)。macOS 安装包正在重新打包，暂未提供下载，可先从源码本地构建。这不是正式稳定版，**不建议在生产环境依赖**。
+安装包已作为 **v1.0.3 预发布测试版** 发布，见 [v1.0.3 Release](https://github.com/estelshi/Claudeguard/releases/tag/v1.0.3)。这不是正式稳定版，**不建议在生产环境依赖**。
 
-- macOS 15+ Universal（Apple Silicon arm64 与 Intel x86_64）：安装包即将发布，目前请在 `source/Claudeguard-macos` 本地构建。安装包为临时（ad-hoc）签名，**未经 Apple 公证**。系统可能在首次打开时拦截，请按 macOS 的「系统设置 → 隐私与安全性」提示确认，不要关闭或绕过系统安全机制。打开 DMG，将 `ClaudeGuard.app` 拖入「应用程序」。
-- Windows 10 / 11 x64：[便携 ZIP](https://github.com/estelshi/Claudeguard/releases/download/v1.0.2/ClaudeGuard-1.0.2-windows-x64.zip) 或 [安装程序](https://github.com/estelshi/Claudeguard/releases/download/v1.0.2/ClaudeGuard-1.0.2-windows-x64-setup.exe)。安装包**未签名**，且**尚未在真实 Windows 设备上完整验收**。系统或浏览器可能提示来源不明，请自行判断风险。完整解压便携 ZIP 后运行 `ClaudeGuard.exe`，或使用安装程序。
+- macOS 15+ Universal（Apple Silicon arm64 与 Intel x86_64）：[DMG](https://github.com/estelshi/Claudeguard/releases/download/v1.0.3/ClaudeGuard-1.0.3-macos-universal.dmg) 或 [应用 ZIP](https://github.com/estelshi/Claudeguard/releases/download/v1.0.3/ClaudeGuard-1.0.3-macos-universal.zip)。安装包为临时（ad-hoc）签名，**未经 Apple 公证**。系统可能在首次打开时拦截，请按 macOS 的「系统设置 → 隐私与安全性」提示确认，不要关闭或绕过系统安全机制。打开 DMG，将 `ClaudeGuard.app` 拖入「应用程序」。
+- Windows 10 / 11 x64：[便携 ZIP](https://github.com/estelshi/Claudeguard/releases/download/v1.0.3/ClaudeGuard-1.0.3-windows-x64.zip) 或 [安装程序](https://github.com/estelshi/Claudeguard/releases/download/v1.0.3/ClaudeGuard-1.0.3-windows-x64-setup.exe)。安装包**未签名**，且**尚未在真实 Windows 设备上完整验收**。系统或浏览器可能提示来源不明，请自行判断风险。完整解压便携 ZIP 后运行 `ClaudeGuard.exe`，或使用安装程序。
 
-下载后可用校验清单核对完整性：Windows 用 [v1.0.2 的 SHA256SUMS.txt](https://github.com/estelshi/Claudeguard/releases/download/v1.0.2/SHA256SUMS.txt)。校验只说明文件在传输中未被改动，不能证明发布者身份。
+下载后可用校验清单核对完整性：[v1.0.3 的 SHA256SUMS.txt](https://github.com/estelshi/Claudeguard/releases/download/v1.0.3/SHA256SUMS.txt)。校验只说明文件在传输中未被改动，不能证明发布者身份。
 
 ## 源码入口
 
@@ -134,9 +134,9 @@ source/Claudeguard-windows/
 
 | 项 | 状态 |
 |---|---|
-| 安装包 | Windows 已更新为 [v1.0.2 预发布测试版](https://github.com/estelshi/Claudeguard/releases/tag/v1.0.2)，可用 [v1.0.2 SHA256SUMS.txt](https://github.com/estelshi/Claudeguard/releases/download/v1.0.2/SHA256SUMS.txt) 校验；macOS 安装包重新打包中，暂请源码构建 |
-| macOS 版 | 已提供 Universal 安装包（临时签名、未公证）。本轮发布未重新进行 Swift 编译，也未做完整应用验收。真实公网固定出口、系统 TUN 和界面联动仍待验证 |
-| Windows 版 | 已提供 1.0.2 x64 便携包和安装程序，未签名，尚未在真实 Windows 设备上完整验收。本版本包含界面与 Clawd 动效更新，以及 TUN / SOCKS5 检查修复。代理导入、系统 TUN 和应用联动仍待验证 |
+| 安装包 | 已更新为 [v1.0.3 预发布测试版](https://github.com/estelshi/Claudeguard/releases/tag/v1.0.3)，可用 [SHA256SUMS.txt](https://github.com/estelshi/Claudeguard/releases/download/v1.0.3/SHA256SUMS.txt) 校验 |
+| macOS 版 | 已提供 1.0.3 Universal 安装包（临时签名、未公证）。真实公网固定出口、系统 TUN 和界面联动仍待验证 |
+| Windows 版 | 已提供 1.0.3 x64 便携包和安装程序，未签名，尚未在真实 Windows 设备上完整验收。本版本包含 SOCKS5 出口探测修复、profile-apply 与 TUN 恢复、「允许 UU 远程直连」开关，以及 Mac/Windows guard-core 同步。代理导入、系统 TUN 和应用联动仍待验证 |
 | Clash Verge Rev / Mihomo | 仓库内测试报告记录了在真实 Mihomo 内核上的本地隔离测试。Windows 客户端导入待验证 |
 | v2rayN / sing-box | 仅 Windows 应用提供该接入。仓库内测试报告记录了针对 sing-box 的本地集成测试。v2rayN 的节点、路由导入和系统 TUN 待真机验证 |
 
