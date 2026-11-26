@@ -61,7 +61,7 @@ ClaudeGuard 不提供节点、订阅或线路。你需要自己有一个固定 I
 
 ## 下载与安装
 
-安装包已作为 **v1.0.0 预发布测试版** 发布，见 [GitHub Release](https://github.com/estelshi/Claudeguard/releases/tag/v1.0.0)，可下载 [Universal DMG](https://github.com/estelshi/Claudeguard/releases/download/v1.0.0/ClaudeGuard-1.0.0-macos-universal.dmg) 或 [应用 ZIP](https://github.com/estelshi/Claudeguard/releases/download/v1.0.0/ClaudeGuard-1.0.0-macos-universal.zip)。这不是正式稳定版，不建议在生产环境依赖。也可在本平台源码目录本地构建，产物位于 `dist/`。总览见[仓库首页](../../README.md)。
+macOS 安装包正在重新打包，暂未提供下载。这不是正式稳定版，不建议在生产环境依赖。也可在本平台源码目录本地构建，产物位于 `dist/`。总览见[仓库首页](../../README.md)。
 
 适用于 macOS 15+，支持 Apple Silicon 和 Intel。打开 DMG，将 `ClaudeGuard.app` 拖入「应用程序」。安装包未公证。接入和恢复说明见 [macOS 使用指南](apps/guardnook/README.md)。
 
